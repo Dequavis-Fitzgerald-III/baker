@@ -142,18 +142,25 @@ done
 success "Flatpak packages installed"
 
 # =============================================================================
-# SECTION 5 — PROJECTS FOLDER & REPOS
+# SECTION 5 — HOME DIRECTORY SETUP
 # Create ~/projects and clone both baker-install and dotfiles into it.
 # Keeping everything in ~/projects makes it easy to find and back up.
 # SSH is now set up so these clones will authenticate correctly.
 # =============================================================================
-section "Setting up ~/projects directory"
+section "Setting up home directory at $HOME"
+
+mkdir -p "$HOME/documents"
+success "~/documents directory created"
+
+mkdir -p "$HOME/downloads"
+success "~/downloads directory created"
 
 mkdir -p "$HOME/projects"
 success "~/projects directory created"
 
 mkdir -p "$HOME/.venvs"
 success "~/.venvs directory created"
+
 
 # Clone baker-install (this repo — useful to have on every machine)
 BAKER_INSTALL_DIR="$HOME/projects/baker-install"
