@@ -88,16 +88,31 @@ flatpak install -y flathub com.spotify.Client
 success "Flatpak packages installed"
 
 # =============================================================================
-# SECTION 4 — DOTFILES
-# Clone your dotfiles repo and symlink configs to where apps expect them.
-# Symlinks mean changes to ~/.dotfiles/ are immediately reflected everywhere.
+# SECTION 4 — PROJECTS FOLDER & REPOS
+# Create ~/projects and clone both baker-install and dotfiles into it.
+# Keeping everything in ~/projects makes it easy to find and back up.
 # =============================================================================
-section "Setting up dotfiles"
+section "Setting up ~/projects directory"
 
-DOTFILES_DIR="$HOME/.dotfiles"
+mkdir -p "$HOME/projects"
+success "~/projects directory ready"
 
-if [[ -d "$DOTFILES_DIR" ]]; then
-    warn "Dotfiles directory already exists, pulling latest..."
+# Clone baker-install (this repo — useful to have on every machine)
+BAKER_INSTALL_DIR="$HOME/projects/baker-install"
+if [[ -d "$BAKER_INSTALL_DIR/.git" ]]; then
+    warn "baker-install already exists, pulling latest..."
+    git -C "$BAKER_INSTALL_DIR" pull
+else
+    git clone git@github.com:Dequavis-Fitzgerald-III/baker-install.git "$BAKER_INSTALL_DIR"
+    success "baker-install cloned to $BAKER_INSTALL_DIR"
+fi
+
+# Clone dotfiles into ~/projects/dotfiles
+# Note: symlinks below still point into this directory
+DOTFILES_DIR="$HOME/projects/dotfiles"
+
+if [[ -d "$DOTFILES_DIR/.git" ]]; then
+    warn "Dotfiles already exists, pulling latest..."
     git -C "$DOTFILES_DIR" pull
 else
     git clone "$DOTFILES_URL" "$DOTFILES_DIR"
