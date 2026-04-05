@@ -458,7 +458,7 @@ if [[ "$LUKS" == true ]]; then
 
     # rd.luks.name tells the kernel the UUID of the LUKS partition and what
     # name to give the decrypted device (/dev/mapper/cryptroot).
-    sed -i "s|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"rd.luks.uuid=\$ROOT_UUID=cryptroot root=/dev/mapper/cryptroot\"|" /etc/default/grub
+    sed -i "s|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"cryptdevice=\$ROOT_UUID=cryptroot root=/dev/mapper/cryptroot\"|" /etc/default/grub
     echo "GRUB configured for LUKS"
 fi
 
