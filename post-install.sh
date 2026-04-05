@@ -80,11 +80,16 @@ success "AUR packages installed"
 # =============================================================================
 section "Installing Flatpak packages"
 
-# Add Flathub remote if it isn't already there.
-# --if-not-exists prevents an error if it's already added.
+FLATPAK_PACKAGES=(
+    com.spotify.Client    # spotify (music player)
+)
+
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
-flatpak install -y flathub com.spotify.Client
+for pkg in "${FLATPAK_PACKAGES[@]}"; do
+    flatpak install -y flathub "$pkg"
+done
+
 success "Flatpak packages installed"
 
 # =============================================================================
@@ -146,38 +151,7 @@ symlink "$DOTFILES_DIR/hypr/hyprland.conf"         "$HOME/.config/hypr/hyprland.
 success "Dotfiles symlinked"
 
 # =============================================================================
-# SECTION 5 — BASHRC ADDITIONS
-# Add aliases and config that aren't in your dotfiles repo.
-# We append to .bashrc (which is symlinked to dotfiles, so be aware —
-# these will appear in your dotfiles repo too).
-# If you'd rather keep these separate, store them in ~/.bashrc.local
-# and source that from your dotfiles .bashrc.
-# =============================================================================
-section "Adding aliases to .bashrc"
-
-BASHRC="$HOME/.bashrc"
-
-# Helper — only append if the line isn't already there.
-# Prevents duplicates if post-install is run more than once.
-add_to_bashrc() {
-    grep -qF "$1" "$BASHRC" 2>/dev/null || echo "$1" >> "$BASHRC"
-}
-
-# Timezone aliases — quickly switch display timezone depending on location.
-# These don't change the hardware clock, just what time is displayed.
-add_to_bashrc "alias tz-uk='sudo timedatectl set-timezone Europe/London'"
-add_to_bashrc "alias tz-us='sudo timedatectl set-timezone America/New_York'"
-
-# Jarvis alias — placeholder until server setup is complete.
-# TODO: Update this when Jarvis moves to Docker on the server.
-# Current dev alias (local venv) — only useful if you've done TEMP_JARVIS_DEV_SETUP.md
-add_to_bashrc "# TODO: Update jarvis alias when Jarvis moves to server/Docker"
-add_to_bashrc "alias jarvis='source ~/.venvs/jarvis/bin/activate && cd ~/projects/jarvis && python main.py'"
-
-success "Aliases added to .bashrc"
-
-# =============================================================================
-# SECTION 6 — NORDVPN
+# SECTION 5 — NORDVPN
 # nordvpn-bin installs the NordVPN daemon. We need to:
 # 1. Create the nordvpn group (the installer may do this, but we ensure it)
 # 2. Add our user to the nordvpn group so we can run nordvpn commands
@@ -205,7 +179,7 @@ warn "Then: nordvpn set autoconnect enabled us"
 warn "(Group membership takes effect after re-login)"
 
 # =============================================================================
-# SECTION 7 — SET LOCALE
+# SECTION 6 — SET LOCALE
 # Set the system locale via localectl.
 # This persists across reboots (writes to /etc/locale.conf).
 # =============================================================================
@@ -219,7 +193,7 @@ sudo timedatectl set-timezone "$TIMEZONE"
 success "Timezone set to $TIMEZONE"
 
 # =============================================================================
-# SECTION 8 — ENABLE REMAINING SERVICES
+# SECTION 7 — ENABLE REMAINING SERVICES
 # Some services are better enabled after first boot with the full system running.
 # =============================================================================
 section "Enabling services"
@@ -261,3 +235,5 @@ if [[ "$PROFILE" == "laptop" ]]; then
 fi
 echo "Enjoy your fresh Arch install! 🚀"
 echo ""
+rm -- "$0"
+
