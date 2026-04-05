@@ -118,7 +118,7 @@ echo "Select timezone:"
 echo "  1) Europe/London    (UK)"
 echo "  2) America/New_York (US East)"
 echo "  3) Enter manually"
-read -rp "Timezone [1-6]: " TZ_INPUT
+read -rp "Timezone [1-3]: " TZ_INPUT
 case "$TZ_INPUT" in
     1) TIMEZONE="Europe/London" ;;
     2) TIMEZONE="America/New_York" ;;
@@ -138,7 +138,7 @@ if [[ "$LUKS_INPUT" =~ ^[Yy]$ ]]; then
     read -rsp "Confirm LUKS passphrase: " LUKS_PASS2
     echo ""
     [[ "$LUKS_PASS" != "$LUKS_PASS2" ]] && error "Passphrases do not match."
-    success "LUKS passphrase confirmed""
+    success "LUKS passphrase confirmed"
 fi
 
 # --- Passwords ---
@@ -180,7 +180,7 @@ echo ""
 warn "THIS WILL WIPE $DISK. There is no undo."
 read -rp "Type YES to continue: " CONFIRM
 [[ "$CONFIRM" != "YES" ]] && error "Aborted."
-success "Confirmed, Beginning install."
+success "Confirmed, beginning install."
 
 # =============================================================================
 # SECTION 2 — PARTITIONING
@@ -204,9 +204,7 @@ success "EFI partition created"
 
 # Root partition — everything from 513MiB to end of disk.
 parted -s "$DISK" mkpart primary ext4 513MiB 100%
-success "root partition created"
-
-success "Partitions created"
+success "Root partition created"
 
 # Figure out partition names — nvme disks use p1/p2, sata disks use 1/2.
 # e.g. /dev/nvme0n1 → /dev/nvme0n1p1 and /dev/nvme0n1p2
@@ -231,6 +229,7 @@ if [[ "$LUKS" == true ]]; then
     # --type luks2 uses the modern LUKS2 format.
     # We echo the passphrase in so it doesn't prompt interactively.
     echo -n "$LUKS_PASS" | cryptsetup luksFormat --type luks2 "$ROOT_PART" -
+    success "LUKS container formatted"
 
     # Open (unlock) the LUKS container. This creates /dev/mapper/cryptroot.
     echo -n "$LUKS_PASS" | cryptsetup open "$ROOT_PART" cryptroot -
@@ -304,6 +303,10 @@ PACKAGES=(
     rofi-wayland xdg-desktop-portal-hyprland
     polkit-gnome sddm
 
+    # Bootloader — grub is the bootloader, efibootmgr manages UEFI boot entries,
+    # os-prober detects other operating systems (e.g. Windows) for dual boot.
+    grub efibootmgr os-prober
+
     # System
     ufw flatpak
 
@@ -326,7 +329,7 @@ if [[ "$PROFILE" == "laptop" ]]; then
 fi
 
 # Run pacstrap with our package list.
-# The -- separates the mount point from the package list.
+# The [@] expands the array to all elements as separate arguments.
 pacstrap /mnt "${PACKAGES[@]}"
 success "Base system installed"
 
@@ -345,9 +348,7 @@ genfstab -U /mnt >> /mnt/etc/fstab
 # nofail means if the EFI partition fails to mount, the system still boots.
 # This is important for dual boot — if Windows does something to the EFI
 # partition, Arch can still start.
-# We use sed to find the EFI partition line and add nofail to its options.
 sed -i "s|$EFI_PART|& |" /mnt/etc/fstab  # no-op, just ensures spacing
-# Find the line with the EFI mount and append nofail to options field
 sed -i "\|$EFI_MOUNT|s/defaults/defaults,nofail/" /mnt/etc/fstab
 
 success "fstab generated"
@@ -417,84 +418,63 @@ echo "User $USERNAME created"
 # Uncomment the %wheel line so members of the wheel group can use sudo.
 # NOPASSWD is NOT set — you'll be prompted for your password.
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+echo "Sudo configured for wheel group"
 
 # --- mkinitcpio (LUKS) ---
 # If LUKS is enabled we need to add the 'encrypt' hook to mkinitcpio.
 # Hooks run during boot to prepare the system — encrypt unlocks the LUKS
 # partition before the root filesystem is mounted.
+# keyboard and keymap hooks ensure your keyboard works at the passphrase prompt.
 if [[ "$LUKS" == true ]]; then
-    # Add 'encrypt' hook before 'filesystems' in the HOOKS line
     sed -i 's/HOOKS=(base udev autodetect/HOOKS=(base udev autodetect keyboard keymap/' /etc/mkinitcpio.conf
     sed -i 's/block filesystems/block encrypt filesystems/' /etc/mkinitcpio.conf
     mkinitcpio -P  # Regenerate all initramfs images
     echo "mkinitcpio regenerated with encrypt hook"
 fi
 
-# --- Bootloader: systemd-boot ---
-# systemd-boot is a simple UEFI bootloader included in systemd.
-# We prefer it over GRUB — it's simpler and perfectly capable for our needs.
-bootctl install --path="$EFI_MOUNT"
+# --- Bootloader: GRUB ---
+# GRUB is the bootloader that runs when the machine powers on.
+# efibootmgr manages the UEFI boot entries so the firmware knows to run GRUB.
+#
+# --target=x86_64-efi        — install for 64-bit UEFI systems
+# --efi-directory=$EFI_MOUNT — where the EFI partition is mounted
+# --bootloader-id=GRUB       — the name that appears in the UEFI firmware menu
+grub-install --target=x86_64-efi --efi-directory=$EFI_MOUNT --bootloader-id=GRUB
+echo "GRUB installed"
 
-# --- Boot loader entries ---
-# Get the UUID of the root partition (or LUKS partition if encrypted).
-# The UUID is used in the boot entry so systemd-boot knows what to boot.
+# --- GRUB config for LUKS ---
+# If LUKS is enabled, we need to tell GRUB how to unlock the encrypted partition
+# before it can find the kernel. This goes in GRUB_CMDLINE_LINUX in /etc/default/grub.
 if [[ "$LUKS" == true ]]; then
-    # For LUKS, we need the UUID of the raw partition (before decryption)
-    # so the bootloader knows which device to decrypt at boot.
+    # Get the UUID of the raw encrypted partition (before decryption).
+    # GRUB needs this to know which device to decrypt at boot.
     ROOT_UUID=\$(blkid -s UUID -o value "$ROOT_PART")
-    KERNEL_OPTIONS="rd.luks.name=\$ROOT_UUID=cryptroot root=/dev/mapper/cryptroot rw quiet"
-else
-    ROOT_UUID=\$(blkid -s UUID -o value "$ROOT_DEVICE")
-    KERNEL_OPTIONS="root=UUID=\$ROOT_UUID rw quiet"
+
+    # rd.luks.name tells the kernel the UUID of the LUKS partition and what
+    # name to give the decrypted device (/dev/mapper/cryptroot).
+    sed -i "s|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"rd.luks.name=\$ROOT_UUID=cryptroot root=/dev/mapper/cryptroot\"|" /etc/default/grub
+    echo "GRUB configured for LUKS"
 fi
 
-# Write the boot entry for Arch Linux.
-# Each line tells systemd-boot something about how to boot.
-cat > "$EFI_MOUNT/loader/entries/arch.conf" <<BOOTENTRY
-title   Arch Linux
-linux   /vmlinuz-linux
-initrd  /$UCODE.img
-initrd  /initramfs-linux.img
-options \$KERNEL_OPTIONS
-BOOTENTRY
-
-# Write the loader config — sets default entry and timeout.
-cat > "$EFI_MOUNT/loader/loader.conf" <<LOADERCONF
-default arch.conf
-timeout 5
-editor  no
-LOADERCONF
-
-echo "systemd-boot configured"
-
-# --- Copy kernel to EFI (dual boot) ---
-# For dual boot, the kernel files live in /boot but the EFI partition is
-# at /boot/efi. systemd-boot needs the kernel in the EFI partition.
-# We copy them manually here and set up a pacman hook to keep them in sync.
+# --- os-prober for dual boot ---
+# os-prober scans for other operating systems and adds them to the GRUB menu.
+# It's disabled by default in /etc/default/grub for security reasons, so we
+# explicitly enable it here for dual boot. Without this Windows won't appear
+# in the GRUB menu.
 if [[ "$DUAL_BOOT" == true ]]; then
-    cp /boot/vmlinuz-linux "$EFI_MOUNT/"
-    cp /boot/$UCODE.img "$EFI_MOUNT/"
-    cp /boot/initramfs-linux.img "$EFI_MOUNT/"
-    echo "Kernel files copied to EFI partition"
-
-    # Pacman hook — runs after every linux package update to re-copy the kernel.
-    # Without this, kernel updates won't take effect on the next boot because
-    # the old kernel file is still sitting in the EFI partition.
-    mkdir -p /etc/pacman.d/hooks
-    cat > /etc/pacman.d/hooks/copy-kernel.hook <<HOOK
-[Trigger]
-Operation = Install
-Operation = Upgrade
-Type = Package
-Target = linux
-
-[Action]
-Depends = rsync
-When = PostTransaction
-Exec = /bin/sh -c 'rsync /boot/vmlinuz-linux /boot/$UCODE.img /boot/initramfs-linux.img $EFI_MOUNT/ 2>/dev/null || true'
-HOOK
-    echo "Pacman hook installed for kernel updates"
+    if grep -q "GRUB_DISABLE_OS_PROBER" /etc/default/grub; then
+        sed -i 's/.*GRUB_DISABLE_OS_PROBER.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
+    else
+        echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
+    fi
+    echo "os-prober enabled for dual boot"
 fi
+
+# Generate the final GRUB config file.
+# grub-mkconfig reads /etc/default/grub, auto-detects kernels and other OSes
+# via os-prober, then writes the config to /boot/grub/grub.cfg.
+grub-mkconfig -o /boot/grub/grub.cfg
+echo "GRUB config generated"
 
 # --- Services ---
 # Enable services so they start automatically on boot.
@@ -522,13 +502,10 @@ success "Chroot configuration done"
 # =============================================================================
 section "Setting up post-install script"
 
-# Copy post-install.sh into the new system if it exists next to this script.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$SCRIPT_DIR/post-install.sh" ]]; then
     cp "$SCRIPT_DIR/post-install.sh" /mnt/home/"$USERNAME"/
     chmod +x /mnt/home/"$USERNAME"/post-install.sh
-    # Write the variables post-install.sh will need into a config file
-    # so it knows the username, profile, dotfiles URL etc.
     cat > /mnt/home/"$USERNAME"/.install-config <<INSTALLCONF
 USERNAME=$USERNAME
 PROFILE=$PROFILE
