@@ -82,6 +82,7 @@ lsblk -dpno NAME,SIZE,MODEL | grep -v loop
 echo ""
 read -rp "Disk to install to (e.g. /dev/nvme0n1): " DISK
 [[ ! -b "$DISK" ]] && error "Disk $DISK not found."
+success "System will be installed on $DISK"
 
 # --- Dual boot ---
 read -rp "Dual boot with Windows? [y/N]: " DUAL_BOOT_INPUT
@@ -147,18 +148,21 @@ echo ""
 read -rsp "Confirm root password: " ROOT_PASSWORD2
 echo ""
 [[ "$ROOT_PASSWORD" != "$ROOT_PASSWORD2" ]] && error "Root passwords do not match."
+success "Root password confirmed"
 
 read -rsp "Password for $USERNAME: " USER_PASSWORD
 echo ""
 read -rsp "Confirm password for $USERNAME: " USER_PASSWORD2
 echo ""
 [[ "$USER_PASSWORD" != "$USER_PASSWORD2" ]] && error "User passwords do not match."
+success "$USERNAME password confirmed"
 
 # --- Dotfiles ---
 echo ""
 read -rp "Dotfiles GitHub repo (default: Dequavis-Fitzgerald-III/dotfiles): " DOTFILES_REPO_INPUT
 DOTFILES_REPO="${DOTFILES_REPO_INPUT:-Dequavis-Fitzgerald-III/dotfiles}"
 DOTFILES_URL="https://github.com/$DOTFILES_REPO.git"
+success "Dotfiles repo: $DOTFILES_URL"
 
 # --- Summary before we do anything destructive ---
 section "Summary — Review Before Continuing"
@@ -176,6 +180,7 @@ echo ""
 warn "THIS WILL WIPE $DISK. There is no undo."
 read -rp "Type YES to continue: " CONFIRM
 [[ "$CONFIRM" != "YES" ]] && error "Aborted."
+success "Confirmed, Beginning install."
 
 # =============================================================================
 # SECTION 2 — PARTITIONING
@@ -189,14 +194,17 @@ section "Partitioning $DISK"
 # Wipe any existing partition table and create a fresh GPT.
 # GPT is required for UEFI systems. MBR is legacy, don't use it.
 parted -s "$DISK" mklabel gpt
+success "GPT created"
 
 # EFI partition — 512MB is plenty for the bootloader and kernel files.
 # We start at 1MiB to align to sector boundaries (avoids performance issues).
 parted -s "$DISK" mkpart ESP fat32 1MiB 513MiB
 parted -s "$DISK" set 1 esp on  # Mark as EFI System Partition
+success "EFI partition created"
 
 # Root partition — everything from 513MiB to end of disk.
 parted -s "$DISK" mkpart primary ext4 513MiB 100%
+success "root partition created"
 
 success "Partitions created"
 
