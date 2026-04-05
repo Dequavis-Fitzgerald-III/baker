@@ -116,18 +116,12 @@ echo ""
 echo "Select timezone:"
 echo "  1) Europe/London    (UK)"
 echo "  2) America/New_York (US East)"
-echo "  3) America/Chicago  (US Central)"
-echo "  4) America/Denver   (US Mountain)"
-echo "  5) America/Los_Angeles (US West)"
-echo "  6) Enter manually"
+echo "  3) Enter manually"
 read -rp "Timezone [1-6]: " TZ_INPUT
 case "$TZ_INPUT" in
     1) TIMEZONE="Europe/London" ;;
     2) TIMEZONE="America/New_York" ;;
-    3) TIMEZONE="America/Chicago" ;;
-    4) TIMEZONE="America/Denver" ;;
-    5) TIMEZONE="America/Los_Angeles" ;;
-    6) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
+    3) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
     *) error "Invalid timezone selection." ;;
 esac
 success "Timezone: $TIMEZONE"
