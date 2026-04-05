@@ -137,7 +137,7 @@ if [[ "$LUKS_INPUT" =~ ^[Yy]$ ]]; then
     read -rsp "Confirm LUKS passphrase: " LUKS_PASS2
     echo ""
     [[ "$LUKS_PASS" != "$LUKS_PASS2" ]] && error "Passphrases do not match."
-    success "LUKS encryption enabled"
+    success "LUKS passphrase confirmed""
 fi
 
 # --- Passwords ---
