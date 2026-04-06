@@ -539,8 +539,6 @@ PROFILE=$PROFILE
 DOTFILES_URL=$DOTFILES_URL
 TIMEZONE=$TIMEZONE
 INSTALLCONF
-    chown "$USERNAME":"$USERNAME" /mnt/home/"$USERNAME"/post-install.sh
-    chown "$USERNAME":"$USERNAME" /mnt/home/"$USERNAME"/.install-config
     success "post-install.sh copied to /home/$USERNAME/"
     info "After first boot, run: bash ~/post-install.sh"
 else
