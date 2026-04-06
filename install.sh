@@ -153,7 +153,7 @@ fi
 # --- Passwords ---
 echo ""
 echo "PASSWORDS:"
-read -rp "Set system passwords the same?" [y/N]: " EQUAL_PASSWORDS"
+read -rp "Set system passwords the same? [y/N]: " EQUAL_PASSWORDS
 if [[ "$EQUAL_PASSWORDS" =~ ^[Yy]$ ]]; then
     read -rsp "System password: " SYSTEM_PASSWORD
     echo ""
