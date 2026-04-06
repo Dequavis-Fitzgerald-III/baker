@@ -318,5 +318,7 @@ fi
 echo "Enjoy your fresh Arch install!"
 echo ""
 
-# Self-delete — remove this script from the home directory now it's done.
+# Self-delete — remove this script, install.sh and .install-config from the home directory now it's done.
+rm -rf ~/install.sh
+rm -rf ~/.install.config
 rm -- "$0"
