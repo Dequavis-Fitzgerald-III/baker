@@ -140,6 +140,8 @@ success "Timezone: $TIMEZONE"
 echo ""
 read -rp "Enable LUKS encryption? [y/N]: " LUKS_INPUT
 LUKS=false
+ROOT_PASSWORD=""
+USER_PASSWORD=""
 if [[ "$LUKS_INPUT" =~ ^[Yy]$ ]]; then
     LUKS=true
     read -rsp "LUKS passphrase: " LUKS_PASS
@@ -149,28 +151,34 @@ if [[ "$LUKS_INPUT" =~ ^[Yy]$ ]]; then
     [[ "$LUKS_PASS" != "$LUKS_PASS2" ]] && error "Passphrases do not match."
     success "LUKS passphrase confirmed"
 
-    read -rp "Use LUKS passphrase as system password? [y/N]: " LUKS_REUSE
-    if [[ "$LUKS_REUSE" =~ ^[Yy]$ ]]; then
+    read -rp "Use LUKS passphrase for all system passwords? [y/N]: " LUKS_REUSE_ALL
+    if [[ "$LUKS_REUSE_ALL" =~ ^[Yy]$ ]]; then
         ROOT_PASSWORD="$LUKS_PASS"
         USER_PASSWORD="$LUKS_PASS"
-        success "Using LUKS passphrase as system password"
+        success "Using LUKS passphrase for root and user"
+    else
+        read -rp "Use LUKS passphrase as root password? [y/N]: " LUKS_REUSE_ROOT
+        [[ "$LUKS_REUSE_ROOT" =~ ^[Yy]$ ]] && ROOT_PASSWORD="$LUKS_PASS" && success "Using LUKS passphrase for root"
+
+        read -rp "Use LUKS passphrase as user password? [y/N]: " LUKS_REUSE_USER
+        [[ "$LUKS_REUSE_USER" =~ ^[Yy]$ ]] && USER_PASSWORD="$LUKS_PASS" && success "Using LUKS passphrase for user"
     fi
 fi
 
 # --- Passwords ---
-if [[ "${LUKS_REUSE:-n}" != "y" && "${LUKS_REUSE:-n}" != "Y" ]]; then
+# Only prompt for passwords that weren't covered by LUKS reuse above
+if [[ -z "$ROOT_PASSWORD" && -z "$USER_PASSWORD" ]]; then
     echo ""
-    echo "PASSWORDS:"
-    read -rp "Set system passwords the same? [y/N]: " EQUAL_PASSWORDS
+    read -rp "Set root and user password the same? [y/N]: " EQUAL_PASSWORDS
     if [[ "$EQUAL_PASSWORDS" =~ ^[Yy]$ ]]; then
         read -rsp "System password: " SYSTEM_PASSWORD
         echo ""
-        read -rsp "Confirm System password: " SYSTEM_PASSWORD2
+        read -rsp "Confirm system password: " SYSTEM_PASSWORD2
         echo ""
-        [[ "$SYSTEM_PASSWORD" != "$SYSTEM_PASSWORD2" ]] && error "Root passwords do not match."
-        success "SYSTEM password confirmed"
-        ROOT_PASSWORD=$SYSTEM_PASSWORD
-        USER_PASSWORD=$SYSTEM_PASSWORD
+        [[ "$SYSTEM_PASSWORD" != "$SYSTEM_PASSWORD2" ]] && error "Passwords do not match."
+        success "System password confirmed"
+        ROOT_PASSWORD="$SYSTEM_PASSWORD"
+        USER_PASSWORD="$SYSTEM_PASSWORD"
     else
         read -rsp "Root password: " ROOT_PASSWORD
         echo ""
@@ -178,7 +186,7 @@ if [[ "${LUKS_REUSE:-n}" != "y" && "${LUKS_REUSE:-n}" != "Y" ]]; then
         echo ""
         [[ "$ROOT_PASSWORD" != "$ROOT_PASSWORD2" ]] && error "Root passwords do not match."
         success "Root password confirmed"
-        
+
         read -rsp "Password for $USERNAME: " USER_PASSWORD
         echo ""
         read -rsp "Confirm password for $USERNAME: " USER_PASSWORD2
@@ -186,6 +194,22 @@ if [[ "${LUKS_REUSE:-n}" != "y" && "${LUKS_REUSE:-n}" != "Y" ]]; then
         [[ "$USER_PASSWORD" != "$USER_PASSWORD2" ]] && error "User passwords do not match."
         success "$USERNAME password confirmed"
     fi
+elif [[ -z "$ROOT_PASSWORD" ]]; then
+    echo ""
+    read -rsp "Root password: " ROOT_PASSWORD
+    echo ""
+    read -rsp "Confirm root password: " ROOT_PASSWORD2
+    echo ""
+    [[ "$ROOT_PASSWORD" != "$ROOT_PASSWORD2" ]] && error "Root passwords do not match."
+    success "Root password confirmed"
+elif [[ -z "$USER_PASSWORD" ]]; then
+    echo ""
+    read -rsp "Password for $USERNAME: " USER_PASSWORD
+    echo ""
+    read -rsp "Confirm password for $USERNAME: " USER_PASSWORD2
+    echo ""
+    [[ "$USER_PASSWORD" != "$USER_PASSWORD2" ]] && error "User passwords do not match."
+    success "$USERNAME password confirmed"
 fi
 
 # --- Dotfiles ---
