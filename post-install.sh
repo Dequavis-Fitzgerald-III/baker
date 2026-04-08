@@ -7,6 +7,13 @@
 
 set -e
 
+sudo -v
+
+# Keep sudo alive for the duration of the script (this way it doesn't need to be entered constantly)
+while true; do sudo -n true; sleep 60; done &
+SUDO_KEEP_ALIVE_PID=$!
+trap 'kill "$SUDO_KEEP_ALIVE_PID"' EXIT
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
