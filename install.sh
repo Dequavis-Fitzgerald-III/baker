@@ -551,14 +551,20 @@ chmod +x /mnt/home/"$USERNAME"/post-install.sh
 chmod +x /mnt/home/"$USERNAME"/post-reboot.sh
 success "post-install.sh and post-reboot.sh downloaded to /home/$USERNAME/"
 
-cat > /mnt/home/"$USERNAME"/.install-config <<INSTALLCONF
+INSTALL_CONFIG="/mnt/home/$USERNAME/.install-config"
+cat > "$INSTALL_CONFIG" <<INSTALLCONF
 USERNAME=$USERNAME
 PROFILE=$PROFILE
 DOTFILES_URL=$DOTFILES_URL
 TIMEZONE=$TIMEZONE
-$([ "$PROFILE" == "laptop" ] && [ -n "$WIFI_SSID" ] && echo "WIFI_SSID=$WIFI_SSID" || true)
-$([ "$PROFILE" == "laptop" ] && [ -n "$WIFI_SSID" ] && echo "WIFI_PASSWORD=$WIFI_PASSWORD" || true)
 INSTALLCONF
+
+if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
+    echo "WIFI_SSID=$WIFI_SSID" >> "$INSTALL_CONFIG"
+    echo "WIFI_PASSWORD=$WIFI_PASSWORD" >> "$INSTALL_CONFIG"
+    success "Wifi credentials written to .install-config"
+fi
+
 success ".install-config written"
 info "After first boot, run: bash ~/post-install.sh"
 info "After post-install reboots, run: bash ~/post-reboot.sh"
