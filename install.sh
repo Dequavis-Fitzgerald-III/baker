@@ -551,6 +551,8 @@ USERNAME=$USERNAME
 PROFILE=$PROFILE
 DOTFILES_URL=$DOTFILES_URL
 TIMEZONE=$TIMEZONE
+$([ "$PROFILE" == "laptop" ] && [ -n "$WIFI_SSID" ] && echo "WIFI_SSID=$WIFI_SSID" || true)
+$([ "$PROFILE" == "laptop" ] && [ -n "$WIFI_SSID" ] && echo "WIFI_PASSWORD=$WIFI_PASSWORD" || true)
 INSTALLCONF
     success "post-install.sh copied to /home/$USERNAME/"
     info "After first boot, run: bash ~/post-install.sh"
