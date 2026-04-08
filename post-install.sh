@@ -227,7 +227,12 @@ section "Enabling services"
 
 sudo systemctl enable --now NetworkManager
 sudo systemctl enable --now sddm
+
 sudo systemctl enable --now ufw
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw enable
+success "Firewall rules set (deny incoming, allow outgoing)"
 
 # Pipewire runs as a user service (per-session, not system-wide).
 # systemctl --user manages the current user's session services.
