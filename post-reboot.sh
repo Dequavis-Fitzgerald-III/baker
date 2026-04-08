@@ -86,8 +86,6 @@ section "Writing todo checklist"
 
 cat > "$HOME/.todo" <<TODO
   [ ] Set Chrome download location: Settings → Downloads → ~/downloads
-  [ ] Set PyCharm projects location: Toolbox → Settings → ~/projects
-  [ ] Configure Toolbox settings
   [ ] Clear this list: rm ~/.todo
 TODO
 success "Todo checklist written to ~/.todo"
