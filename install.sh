@@ -421,6 +421,7 @@ PACKAGES=(
 
     # Essential tools
     sudo nano git base-devel openssh unzip zip wget curl htop tree man-db fastfetch
+    pandoc libreoffice-fresh
 
     # Audio — pipewire is the modern audio server.
     # pipewire-pulse provides compatibility with pulseaudio apps.
