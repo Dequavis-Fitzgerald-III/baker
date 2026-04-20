@@ -29,6 +29,8 @@ section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 # =============================================================================
 # SECTION 1 — INTERACTIVE QUESTIONS
 # We ask everything upfront so the install can run unattended after this point.
+# Order: profile → hostname → username → cpu → timezone → wifi (laptop only)
+#        → disk → dual boot → hdd (workstation only) → luks → passwords → dotfiles
 # =============================================================================
 section "Welcome to the Arch Installer"
 echo "Answer the questions below. The install will begin after."
@@ -46,9 +48,54 @@ case "$PROFILE_INPUT" in
 esac
 success "Profile: $PROFILE"
 
+# --- Hostname ---
+# Defaults make re-runs faster on known machines.
+echo ""
+read -rp "Hostname [default: nomadbaker for laptop, pearlybaker for workstation]: " HOSTNAME
+if [[ -z "$HOSTNAME" ]]; then
+    [[ "$PROFILE" == "laptop" ]] && HOSTNAME="nomadbaker" || HOSTNAME="pearlybaker"
+fi
+success "Hostname: $HOSTNAME"
+
+# --- Username ---
+read -rp "Username [default: clarkehines]: " USERNAME
+USERNAME="${USERNAME:-clarkehines}"
+success "Username: $USERNAME"
+
+# --- CPU ---
+echo ""
+echo "Select CPU brand:"
+echo "  1) Intel  — will install intel-ucode"
+echo "  2) AMD    — will install amd-ucode"
+read -rp "CPU [1/2]: " CPU_INPUT
+case "$CPU_INPUT" in
+    1) CPU="intel" ; UCODE="intel-ucode" ;;
+    2) CPU="amd"   ; UCODE="amd-ucode"   ;;
+    *) error "Invalid CPU selection." ;;
+esac
+success "CPU: $CPU ($UCODE)"
+
+# --- Timezone ---
+echo ""
+echo "Select timezone:"
+echo "  1) Europe/London    (UK)"
+echo "  2) America/New_York (US East)"
+echo "  3) Enter manually"
+read -rp "Timezone [1-3]: " TZ_INPUT
+case "$TZ_INPUT" in
+    1) TIMEZONE="Europe/London" ;;
+    2) TIMEZONE="America/New_York" ;;
+    3) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
+    *) error "Invalid timezone selection." ;;
+esac
+success "Timezone: $TIMEZONE"
+
 # --- Wifi (laptop only) ---
 # We only ask for wifi credentials if we're not already online.
-# This avoids failing when you have a USB ethernet dongle or ran the script twice.
+# This avoids failing when already connected (e.g. you ran the script to
+# download it) or when using a USB ethernet dongle.
+WIFI_SSID=""
+WIFI_PASSWORD=""
 if [[ "$PROFILE" == "laptop" ]]; then
     section "Network Check"
     if ping -c 1 -W 3 archlinux.org > /dev/null 2>&1; then
@@ -70,20 +117,7 @@ if [[ "$PROFILE" == "laptop" ]]; then
     fi
 fi
 
-# --- Hostname ---
-# Defaults make re-runs faster on known machines.
-read -rp "Hostname [default: nomadbaker for laptop, pearlybaker for workstation]: " HOSTNAME
-if [[ -z "$HOSTNAME" ]]; then
-    [[ "$PROFILE" == "laptop" ]] && HOSTNAME="nomadbaker" || HOSTNAME="pearlybaker"
-fi
-success "Hostname: $HOSTNAME"
-
-# --- Username ---
-read -rp "Username [default: clarkehines]: " USERNAME
-USERNAME="${USERNAME:-clarkehines}"
-success "Username: $USERNAME"
-
-# --- Disk ---
+# --- Primary Disk ---
 # We list available disks so you can see what's there before typing.
 section "Disk Selection"
 echo "Available disks:"
@@ -142,33 +176,45 @@ else
 fi
 success "EFI will be mounted at $EFI_MOUNT"
 
-# --- CPU ---
-echo ""
-echo "Select CPU brand:"
-echo "  1) Intel  — will install intel-ucode"
-echo "  2) AMD    — will install amd-ucode"
-read -rp "CPU [1/2]: " CPU_INPUT
-case "$CPU_INPUT" in
-    1) CPU="intel" ; UCODE="intel-ucode" ;;
-    2) CPU="amd"   ; UCODE="amd-ucode"   ;;
-    *) error "Invalid CPU selection." ;;
-esac
-success "CPU: $CPU ($UCODE)"
+# --- Secondary HDD (workstation only) ---
+# On workstation we support an optional secondary internal drive.
+# We detect the partition, filesystem, and UUID dynamically — no hardcoding.
+HDD=false
+HDD_PART=""
+HDD_UUID=""
+HDD_FSTYPE=""
+HDD_MOUNT=""
 
-# --- Timezone ---
-echo ""
-echo "Select timezone:"
-echo "  1) Europe/London    (UK)"
-echo "  2) America/New_York (US East)"
-echo "  3) Enter manually"
-read -rp "Timezone [1-3]: " TZ_INPUT
-case "$TZ_INPUT" in
-    1) TIMEZONE="Europe/London" ;;
-    2) TIMEZONE="America/New_York" ;;
-    3) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
-    *) error "Invalid timezone selection." ;;
-esac
-success "Timezone: $TIMEZONE"
+if [[ "$PROFILE" == "workstation" ]]; then
+    echo ""
+    read -rp "Mount a secondary internal HDD? [y/N]: " HDD_INPUT
+    if [[ "$HDD_INPUT" =~ ^[Yy]$ ]]; then
+        HDD=true
+
+        echo ""
+        echo "Available disks (excluding the primary install disk):"
+        lsblk -dpno NAME,SIZE,MODEL | grep -v loop | grep -v "^$DISK "
+        echo ""
+        read -rp "Secondary drive (e.g. /dev/sda): " HDD_DISK
+        [[ ! -b "$HDD_DISK" ]] && error "Disk $HDD_DISK not found."
+
+        # Detect the single partition on the drive.
+        HDD_PART=$(lsblk -lnpo NAME "$HDD_DISK" | grep -v "^$HDD_DISK$" | head -n1)
+        [[ -z "$HDD_PART" ]] && error "No partition found on $HDD_DISK. Is the drive partitioned?"
+        success "Found partition: $HDD_PART"
+
+        # Detect filesystem type and UUID dynamically.
+        HDD_FSTYPE=$(blkid -s TYPE -o value "$HDD_PART")
+        HDD_UUID=$(blkid -s UUID -o value "$HDD_PART")
+        [[ -z "$HDD_FSTYPE" ]] && error "Could not detect filesystem on $HDD_PART."
+        [[ -z "$HDD_UUID" ]]   && error "Could not detect UUID on $HDD_PART."
+        success "Filesystem: $HDD_FSTYPE | UUID: $HDD_UUID"
+
+        read -rp "Mount point [default: /mnt/hdd]: " HDD_MOUNT_INPUT
+        HDD_MOUNT="${HDD_MOUNT_INPUT:-/mnt/hdd}"
+        success "HDD will be mounted at $HDD_MOUNT"
+    fi
+fi
 
 # --- LUKS ---
 echo ""
@@ -200,7 +246,7 @@ if [[ "$LUKS_INPUT" =~ ^[Yy]$ ]]; then
 fi
 
 # --- Passwords ---
-# Only prompt for passwords that weren't covered by LUKS reuse above
+# Only prompt for passwords that weren't covered by LUKS reuse above.
 if [[ -z "$ROOT_PASSWORD" && -z "$USER_PASSWORD" ]]; then
     echo ""
     read -rp "Set root and user password the same? [y/N]: " EQUAL_PASSWORDS
@@ -258,6 +304,8 @@ section "Summary — Review Before Continuing"
 echo "  Profile:    $PROFILE"
 echo "  Hostname:   $HOSTNAME"
 echo "  Username:   $USERNAME"
+echo "  CPU:        $CPU ($UCODE)"
+echo "  Timezone:   $TIMEZONE"
 echo "  Disk:       $DISK"
 echo "  Dual boot:  $DUAL_BOOT"
 if [[ "$DUAL_BOOT" == true ]]; then
@@ -270,8 +318,9 @@ if [[ "$DUAL_BOOT" == true ]]; then
     fi
 fi
 echo "  EFI mount:  $EFI_MOUNT"
-echo "  CPU:        $CPU ($UCODE)"
-echo "  Timezone:   $TIMEZONE"
+if [[ "$HDD" == true ]]; then
+    echo "  HDD:        $HDD_PART ($HDD_FSTYPE) → $HDD_MOUNT"
+fi
 echo "  LUKS:       $LUKS"
 echo "  Dotfiles:   $DOTFILES_URL"
 echo ""
@@ -487,6 +536,18 @@ success "Base system installed"
 section "Generating fstab"
 genfstab -U /mnt >> /mnt/etc/fstab
 success "fstab generated"
+
+# --- Secondary HDD fstab entry ---
+# genfstab only sees what's mounted right now, so the HDD won't be picked up
+# automatically. We append its entry manually using the UUID and fstype we
+# detected during the questions phase.
+if [[ "$HDD" == true ]]; then
+    echo "" >> /mnt/etc/fstab
+    echo "# Secondary HDD" >> /mnt/etc/fstab
+    echo "UUID=$HDD_UUID  $HDD_MOUNT  $HDD_FSTYPE  defaults  0  2" >> /mnt/etc/fstab
+    success "Secondary HDD fstab entry added ($HDD_PART → $HDD_MOUNT)"
+fi
+
 info "fstab contents:"
 cat /mnt/etc/fstab
 
@@ -544,6 +605,14 @@ echo "User $USERNAME created"
 # --- Sudo ---
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 echo "Sudo configured for wheel group"
+
+# --- Secondary HDD mount point ---
+# The fstab entry was written outside the chroot, but the directory it mounts
+# to must exist inside the new system before the first boot.
+if [[ "$HDD" == true ]]; then
+    mkdir -p "$HDD_MOUNT"
+    echo "Mount point created: $HDD_MOUNT"
+fi
 
 # --- Remove hyprland-welcome ---
 # hyprland-welcome is an unwanted welcome screen that gets pulled in as a
