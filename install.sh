@@ -484,7 +484,7 @@ PACKAGES=(
     dosfstools
 
     # Network
-    networkmanager
+    networkmanager tailscale
 
     # Essential tools
     sudo nano git base-devel openssh unzip zip wget curl htop tree man-db fastfetch
@@ -763,6 +763,7 @@ systemctl enable NetworkManager
 systemctl enable sddm
 systemctl enable ufw
 systemctl enable sshd
+systemctl enable tailscaled
 
 if [[ "$PROFILE" == "laptop" ]]; then
     systemctl enable tlp

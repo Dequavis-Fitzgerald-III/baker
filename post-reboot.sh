@@ -39,7 +39,22 @@ nordvpn set killswitch on     || warn "Failed to set killswitch — try manually
 success "NordVPN autoconnect (us) and killswitch enabled"
 
 # =============================================================================
-# SECTION 2 — BASHRC ADDITIONS
+# SECTION 2 — TAILSCALE
+# tailscale up opens a browser auth flow — same pattern as nordvpn login.
+# No further config needed: MagicDNS is on by default and ~/.ssh/config
+# already uses the MagicDNS short names, so SSH across the fleet just works.
+# =============================================================================
+section "Tailscale Setup"
+
+info "Bringing Tailscale up — your browser will open to complete auth..."
+tailscale up || warn "tailscale up failed — run it manually before continuing"
+
+read -rp "Press ENTER once you have authenticated Tailscale in the browser..."
+
+success "Tailscale connected — MagicDNS hostnames are now live"
+
+# =============================================================================
+# SECTION 3 — BASHRC ADDITIONS
 # We append to .bashrc rather than symlinking here because these are
 # machine-specific behaviours, not dotfile config.
 # We guard each addition with a grep check so re-running this script
@@ -78,7 +93,7 @@ else
 fi
 
 # =============================================================================
-# SECTION 3 — TODO FILE
+# SECTION 4 — TODO FILE
 # Written to ~/.todo and displayed on every new terminal via the hook above.
 # User clears it manually once everything is done by running: rm ~/.todo
 # =============================================================================
