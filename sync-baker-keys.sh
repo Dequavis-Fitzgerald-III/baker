@@ -23,7 +23,7 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 BAKER_INSTALL_DIR="$HOME/projects/baker-install"
 KEYS_DIR="$BAKER_INSTALL_DIR/keys"
 SSH_KEY="$HOME/.ssh/id_ed25519"
-CURRENT_HOST="$(hostname)"
+CURRENT_HOST="$(cat /etc/hostname)"
 USERNAME="$(whoami)"
 
 [[ -d "$BAKER_INSTALL_DIR/.git" ]] || error "baker-install repo not found at $BAKER_INSTALL_DIR"

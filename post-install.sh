@@ -284,7 +284,7 @@ section "SSH Setup"
 SSH_KEY="$HOME/.ssh/id_ed25519"
 BAKER_INSTALL_DIR="$HOME/projects/baker-install"
 KEYS_DIR="$BAKER_INSTALL_DIR/keys"
-CURRENT_HOST="$(hostname)"
+CURRENT_HOST="$(cat /etc/hostname)"
 
 if [[ -f "$SSH_KEY" ]]; then
     warn "SSH key already exists at $SSH_KEY, skipping generation"
