@@ -544,10 +544,10 @@ fi
 
 # GPU drivers
 if [[ "$GPU" == "nvidia" ]]; then
-    # nvidia          — proprietary kernel module
+    # nvidia-dkms     — proprietary kernel module (dkms builds against any kernel)
     # nvidia-utils    — userspace utilities and OpenGL
     # nvidia-settings — GUI control panel
-    PACKAGES+=(nvidia nvidia-utils nvidia-settings)
+    PACKAGES+=(nvidia-dkms nvidia-utils nvidia-settings)
 elif [[ "$GPU" == "amd" ]]; then
     # mesa              — open source OpenGL/Vulkan implementation
     # vulkan-radeon     — Vulkan support for AMD
@@ -559,6 +559,11 @@ elif [[ "$GPU" == "intel" ]]; then
     # intel-media-driver — hardware video acceleration (Gen8+)
     PACKAGES+=(mesa vulkan-intel intel-media-driver)
 fi
+
+# Refresh package databases on the live ISO before installing.
+# Without this, pacstrap uses stale DB files from the ISO image and
+# can fail to find packages that exist in the current repos (e.g. nvidia).
+pacman -Sy
 
 pacstrap /mnt "${PACKAGES[@]}"
 success "Base system installed"
