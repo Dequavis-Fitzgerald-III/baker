@@ -484,7 +484,7 @@ PACKAGES=(
     dosfstools
 
     # Network
-    networkmanager tailscale
+    networkmanager tailscale reflector
 
     # Essential tools
     sudo nano git base-devel openssh unzip zip wget curl htop tree man-db fastfetch
@@ -559,6 +559,12 @@ elif [[ "$GPU" == "intel" ]]; then
     # intel-media-driver — hardware video acceleration (Gen8+)
     PACKAGES+=(mesa vulkan-intel intel-media-driver)
 fi
+
+# Fix keyring before pacstrap — old ISO keyrings cause signature verification
+# errors when installing packages from current repos.
+pacman-key --init
+pacman-key --populate archlinux
+pacman -Sy archlinux-keyring
 
 # Refresh package databases on the live ISO before installing.
 # Without this, pacstrap uses stale DB files from the ISO image and
