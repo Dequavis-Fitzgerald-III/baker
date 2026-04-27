@@ -471,92 +471,36 @@ success "EFI mounted at /mnt$EFI_MOUNT"
 section "Installing base system (pacstrap)"
 info "This will take a while depending on your connection..."
 
-# Build the package list. Start with packages common to all profiles.
-PACKAGES=(
-    # Base system
-    base linux linux-firmware
+# Fetch package lists from the baker manifests.
+# Manifests hold the "ongoing" packages — tools and apps for a running system.
+# Bootstrap packages (kernel, bootloader, fs tools, hardware drivers) are added
+# directly here because they are install-time only or hardware-specific.
+REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/baker/main"
 
-    # CPU microcode — corrects CPU bugs at boot. Always install the right one.
-    "$UCODE"
+info "Fetching package manifests from baker repo..."
 
-    # Filesystem tools
-    # dosfstools — required to manage the FAT32 EFI partition
-    dosfstools
+# Extracts a named [section] block from manifest content piped via stdin.
+parse_section() {
+    awk "/^\[$1\]/{found=1; next} /^\[/{found=0} found && !/^#/ && NF"
+}
 
-    # Network
-    networkmanager tailscale reflector
-
-    # Essential tools
-    sudo nano git base-devel openssh unzip zip wget curl htop tree man-db fastfetch
-    pandoc libreoffice-fresh
-
-    # Audio — pipewire is the modern audio server.
-    # pipewire-pulse provides compatibility with pulseaudio apps.
-    # pipewire-jack provides JACK compatibility (prevents interactive prompt at install).
-    # wireplumber is the session manager that routes audio between apps and devices.
-    # sof-firmware provides firmware for Intel Sound Open Firmware audio hardware.
-    alsa-utils sof-firmware pipewire pipewire-jack pipewire-pulse wireplumber
-
-    # Input — libinput is the input device library that handles trackpads, mice, etc.
-    # xf86-input-libinput is the X/Wayland driver wrapper around libinput.
-    # Without these, trackpad may not work at all on a fresh install.
-    libinput xf86-input-libinput
-
-    # Desktop — Hyprland is a Wayland compositor.
-    # hyprpaper — wallpaper daemon for Hyprland
-    # dunst — notification daemon
-    # waybar — status bar
-    # kitty — terminal emulator
-    # rofi-wayland — app launcher (Wayland-compatible fork of rofi)
-    # xdg-desktop-portal-hyprland — allows apps to open file pickers, screen share, etc.
-    # polkit-gnome — authentication agent (prompts for sudo password in GUI apps)
-    # sddm — display manager (the login screen)
-    hyprland hyprpaper dunst waybar kitty
-    rofi-wayland xdg-desktop-portal-hyprland
-    polkit-gnome sddm
-
-    # Bootloader
-    # grub — the bootloader itself
-    # efibootmgr — manages UEFI boot entries so firmware knows to load GRUB
-    # os-prober — detects other OSes (e.g. Windows) for dual boot GRUB entries
-    grub efibootmgr os-prober
-
-    # System
-    ufw flatpak
-
-    # Fonts
-    ttf-input-nerd
+PACKAGES=()
+while IFS= read -r pkg; do
+    PACKAGES+=("$pkg")
+done < <(
+    curl -fsSL "$REPO_RAW/packages/base.txt"     | parse_section pacman
+    curl -fsSL "$REPO_RAW/packages/$PROFILE.txt" | parse_section pacman
 )
 
-# Workstation-only packages
-if [[ "$PROFILE" == "workstation" ]]; then
-    PACKAGES+=(ollama)
-fi
+# Bootstrap packages — install-time only, not in manifests
+PACKAGES+=(base linux linux-firmware "$UCODE" dosfstools grub efibootmgr os-prober)
 
-# Laptop-only packages
-if [[ "$PROFILE" == "laptop" ]]; then
-    # tlp — battery management daemon, extends laptop battery life
-    # brightnessctl — controls screen backlight brightness
-    # bluez — the Bluetooth protocol stack
-    # bluez-utils — command line tools for Bluetooth (bluetoothctl etc.)
-    PACKAGES+=(tlp brightnessctl bluez bluez-utils)
-fi
-
-# GPU drivers
+# GPU drivers — hardware-specific, not in manifests
 if [[ "$GPU" == "nvidia" ]]; then
-    # nvidia-dkms     — proprietary kernel module (dkms builds against any kernel)
-    # nvidia-utils    — userspace utilities and OpenGL
-    # nvidia-settings — GUI control panel
     PACKAGES+=(nvidia-dkms nvidia-utils nvidia-settings)
 elif [[ "$GPU" == "amd" ]]; then
-    # mesa              — open source OpenGL/Vulkan implementation
-    # vulkan-radeon     — Vulkan support for AMD
-    # libva-mesa-driver — hardware video acceleration
     PACKAGES+=(mesa vulkan-radeon libva-mesa-driver)
 elif [[ "$GPU" == "intel" ]]; then
-    # mesa               — open source OpenGL/Vulkan implementation
-    # vulkan-intel       — Vulkan support for Intel
-    # intel-media-driver — hardware video acceleration (Gen8+)
     PACKAGES+=(mesa vulkan-intel intel-media-driver)
 fi
 
@@ -812,22 +756,22 @@ chmod +x /mnt/home/"$USERNAME"/post-install.sh
 chmod +x /mnt/home/"$USERNAME"/post-reboot.sh
 success "post-install.sh and post-reboot.sh downloaded to /home/$USERNAME/"
 
-INSTALL_CONFIG="/mnt/home/$USERNAME/.install-config"
-cat > "$INSTALL_CONFIG" <<INSTALLCONF
+BAKER_CONFIG="/mnt/home/$USERNAME/.baker-config"
+cat > "$BAKER_CONFIG" <<BAKERCONF
 USERNAME=$USERNAME
 PROFILE=$PROFILE
 DOTFILES_URL=$DOTFILES_URL
 TIMEZONE=$TIMEZONE
 GPU=$GPU
-INSTALLCONF
+BAKERCONF
 
 if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
-    echo "WIFI_SSID=$WIFI_SSID" >> "$INSTALL_CONFIG"
-    echo "WIFI_PASSWORD=$WIFI_PASSWORD" >> "$INSTALL_CONFIG"
-    success "Wifi credentials written to .install-config"
+    echo "WIFI_SSID=$WIFI_SSID" >> "$BAKER_CONFIG"
+    echo "WIFI_PASSWORD=$WIFI_PASSWORD" >> "$BAKER_CONFIG"
+    success "Wifi credentials written to .baker-config"
 fi
 
-success ".install-config written"
+success ".baker-config written"
 info "After first boot, run: bash ~/post-install.sh"
 info "After post-install reboots, run: bash ~/post-reboot.sh"
 

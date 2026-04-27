@@ -99,6 +99,12 @@ else
     warn "WORKON_HOME already in .bashrc, skipping"
 fi
 
+# baker-update alias
+echo '' >> "$BASHRC"
+echo '# Baker update' >> "$BASHRC"
+echo 'alias baker-update="$HOME/projects/baker/upgrade.sh"' >> "$BASHRC"
+success "baker-update alias added to .bashrc"
+
 # Todo checklist hook — displays ~/.todo if it exists
 if ! grep -q "\.todo" "$BASHRC"; then
     echo '' >> "$BASHRC"

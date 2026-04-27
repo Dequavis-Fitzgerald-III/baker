@@ -30,13 +30,22 @@ section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 # =============================================================================
 # LOAD CONFIG written by install.sh
 # =============================================================================
-CONFIG_FILE="$HOME/.install-config"
-[[ ! -f "$CONFIG_FILE" ]] && error "Config file not found at $CONFIG_FILE"
+BAKER_CONFIG="$HOME/.baker-config"
+[[ ! -f "$BAKER_CONFIG" ]] && error "Config file not found at $BAKER_CONFIG"
 
-# Source the config — loads USERNAME, PROFILE, DOTFILES_URL, TIMEZONE
-source "$CONFIG_FILE"
+# Source the config — loads USERNAME, PROFILE, DOTFILES_URL, TIMEZONE, GPU
+source "$BAKER_CONFIG"
 success "Loaded install config"
 info "Profile: $PROFILE | User: $USERNAME | Dotfiles: $DOTFILES_URL"
+
+# Baker repo raw URL — used to fetch package manifests without needing the repo cloned yet.
+REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/baker/main"
+
+# Extracts a named [section] block from manifest content piped via stdin.
+# Usage: curl -fsSL "$REPO_RAW/packages/base.txt" | parse_section aur
+parse_section() {
+    awk "/^\[$1\]/{found=1; next} /^\[/{found=0} found && !/^#/ && NF"
+}
 
 # Make sure we're not running as root.
 [[ "$EUID" -eq 0 ]] && error "Don't run this as root. Run as $USERNAME."
@@ -98,12 +107,7 @@ fi
 # =============================================================================
 section "Installing AUR packages"
 
-AUR_PACKAGES=(
-    google-chrome        # Browser
-    nordvpn-bin          # NordVPN client (binary, no compile needed)
-    jetbrains-toolbox    # JetBrains IDE manager (PyCharm, etc.)
-)
-
+mapfile -t AUR_PACKAGES < <(curl -fsSL "$REPO_RAW/packages/base.txt" | parse_section aur)
 yay -S --noconfirm "${AUR_PACKAGES[@]}"
 success "AUR packages installed"
 
@@ -125,12 +129,9 @@ success "Chrome configured to use built-in password store (no keyring prompt)"
 # =============================================================================
 section "Installing Flatpak packages"
 
-FLATPAK_PACKAGES=(
-    com.spotify.Client
-)
-
 flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
 
+mapfile -t FLATPAK_PACKAGES < <(curl -fsSL "$REPO_RAW/packages/base.txt" | parse_section flatpak)
 for pkg in "${FLATPAK_PACKAGES[@]}"; do
     flatpak install -y flathub "$pkg"
 done
@@ -416,6 +417,5 @@ for i in {10..1}; do
     sleep 1
 done
 echo ""
-rm -f "$HOME/.install-config"
 rm -- "$0"
 sudo reboot

@@ -1,0 +1,12 @@
+# Laptop packages — nomadbaker
+
+[pacman]
+# Battery management
+tlp
+
+# Backlight control
+brightnessctl
+
+# Bluetooth
+bluez
+bluez-utils

@@ -1,0 +1,63 @@
+# Base packages — all profiles
+
+[pacman]
+# Network
+networkmanager
+tailscale
+reflector
+bind
+
+# Essential tools
+sudo
+nano
+git
+base-devel
+openssh
+unzip
+zip
+wget
+curl
+htop
+tree
+man-db
+fastfetch
+pandoc
+libreoffice-fresh
+
+# Audio
+alsa-utils
+sof-firmware
+pipewire
+pipewire-jack
+pipewire-pulse
+wireplumber
+
+# Input
+libinput
+xf86-input-libinput
+
+# Desktop
+hyprland
+hyprpaper
+dunst
+waybar
+kitty
+rofi-wayland
+xdg-desktop-portal-hyprland
+polkit-gnome
+sddm
+
+# System
+ufw
+flatpak
+
+# Fonts
+ttf-input-nerd
+
+[aur]
+google-chrome
+nordvpn-bin
+jetbrains-toolbox
+
+[flatpak]
+com.spotify.Client
