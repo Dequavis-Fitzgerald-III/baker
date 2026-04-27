@@ -34,9 +34,10 @@ nordvpn login || warn "nordvpn login failed — run it manually before continuin
 
 read -rp "Press ENTER once you have logged in to NordVPN in the browser..."
 
-nordvpn set autoconnect on us || warn "Failed to set autoconnect — try manually: nordvpn set autoconnect on us"
-nordvpn set killswitch on     || warn "Failed to set killswitch — try manually: nordvpn set killswitch on"
-success "NordVPN autoconnect (us) and killswitch enabled"
+nordvpn set autoconnect on us          || warn "Failed to set autoconnect — try manually: nordvpn set autoconnect on us"
+nordvpn set killswitch on              || warn "Failed to set killswitch — try manually: nordvpn set killswitch on"
+nordvpn allowlist add subnet 100.64.0.0/10 || warn "Failed to set Tailscale allowlist — try manually: nordvpn allowlist add subnet 100.64.0.0/10"
+success "NordVPN autoconnect (us), killswitch, and Tailscale allowlist enabled"
 
 # =============================================================================
 # SECTION 2 — TAILSCALE
