@@ -133,6 +133,15 @@ bash "$BAKER_DIR/sync-baker-keys.sh"
 success "SSH config up to date"
 
 # =============================================================================
+# SECTION 8 — SYSTEM CONFIGURATION
+# Applies idempotent system config from .baker-config. Only makes changes
+# if something has drifted from the desired state.
+# =============================================================================
+section "Applying system configuration"
+sudo bash "$BAKER_DIR/configure.sh" "$HOME/.baker-config"
+success "System configuration up to date"
+
+# =============================================================================
 # DONE
 # =============================================================================
 section "Upgrade complete"

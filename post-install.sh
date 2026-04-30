@@ -82,6 +82,10 @@ else
     fi
 fi
 
+# NetworkManager has the wifi credentials saved — strip them from .baker-config.
+sed -i '/^WIFI_SSID=/d;/^WIFI_PASSWORD=/d;/^# --- Temporary/d' "$BAKER_CONFIG"
+success "Wifi credentials removed from .baker-config"
+
 # =============================================================================
 # SECTION 2 — YAY (AUR Helper)
 # yay lets us install packages from the AUR (Arch User Repository).

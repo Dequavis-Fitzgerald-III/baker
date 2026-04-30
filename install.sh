@@ -430,6 +430,9 @@ if [[ "$LUKS" == true ]]; then
     # From here on, we install to the mapped device, not the raw partition.
     ROOT_DEVICE="/dev/mapper/cryptroot"
     success "LUKS container opened at $ROOT_DEVICE"
+
+    LUKS_UUID=$(blkid -s UUID -o value "$ROOT_PART")
+    info "LUKS UUID: $LUKS_UUID"
 else
     ROOT_DEVICE="$ROOT_PART"
 fi
@@ -557,32 +560,20 @@ arch-chroot /mnt /bin/bash <<EOF
 
 set -e
 
-# --- Timezone ---
-ln -sf /usr/share/zoneinfo/$TIMEZONE /etc/localtime
-hwclock --systohc
-echo "Timezone set to $TIMEZONE"
-
-# --- Locale ---
-sed -i 's/^#en_GB.UTF-8/en_GB.UTF-8/' /etc/locale.gen
-locale-gen
-echo 'LANG=en_GB.UTF-8' > /etc/locale.conf
-echo "Locale set"
-
-# --- Console keymap ---
-# vconsole.conf sets the keyboard layout for the TTY/console.
-# This file must exist before mkinitcpio runs or the keymap hook
-# won't have anything to bake into the initramfs.
-echo "KEYMAP=us" > /etc/vconsole.conf
-echo "Console keymap set"
-
-# --- Hostname ---
-echo "$HOSTNAME" > /etc/hostname
-cat > /etc/hosts <<HOSTS
-127.0.0.1   localhost
-::1         localhost
-127.0.1.1   $HOSTNAME.localdomain $HOSTNAME
-HOSTS
-echo "Hostname set to $HOSTNAME"
+# Export config vars so configure.sh can read them without needing .baker-config,
+# which hasn't been written yet at this point in the install.
+export PROFILE=$PROFILE
+export USERNAME=$USERNAME
+export HOSTNAME=$HOSTNAME
+export TIMEZONE=$TIMEZONE
+export LOCALE=$LOCALE
+export KEYMAP=$KEYMAP
+export GPU=$GPU
+export LUKS=$LUKS
+export LUKS_UUID=$LUKS_UUID
+export DUAL_BOOT=$DUAL_BOOT
+export HDD=$HDD
+export HDD_MOUNT=$HDD_MOUNT
 
 # --- Passwords ---
 echo "root:$ROOT_PASSWORD" | chpasswd
@@ -593,122 +584,12 @@ useradd -m -G wheel,audio,video,storage,input -s /bin/bash "$USERNAME"
 echo "$USERNAME:$USER_PASSWORD" | chpasswd
 echo "User $USERNAME created"
 
-# --- Sudo ---
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
-echo "Sudo configured for wheel group"
-
-# --- Secondary HDD mount point ---
-# The fstab entry was written outside the chroot, but the directory it mounts
-# to must exist inside the new system before the first boot.
-if [[ "$HDD" == true ]]; then
-    mkdir -p "$HDD_MOUNT"
-    echo "Mount point created: $HDD_MOUNT"
-fi
-
-# --- Remove hyprland-welcome ---
-# hyprland-welcome is an unwanted welcome screen that gets pulled in as a
-# dependency of hyprland. We remove it unconditionally — we never want it.
-pacman -Rns --noconfirm hyprland-welcome 2>/dev/null || true
-echo "hyprland-welcome removed (or was not present)"
-
-# --- mkinitcpio ---
-# If LUKS is enabled we need the 'encrypt' hook so the initramfs can unlock
-# the LUKS partition before mounting root.
-#
-# CRITICAL: We replace the entire HOOKS line rather than patching it with
-# multiple seds. Patching is fragile — if the default line is slightly
-# different than expected, the result is a broken initramfs.
-#
-# Hook order explanation:
-#   base       — minimal busybox environment
-#   udev       — device manager (REQUIRED for 'encrypt' hook — do NOT use systemd here)
-#   autodetect — trims the initramfs to only include modules needed for this hardware
-#   microcode  — loads CPU microcode early
-#   modconf    — loads modules listed in /etc/modules-load.d/
-#   kms        — loads kernel mode setting modules early (better display at boot)
-#   keyboard   — enables keyboard input at the passphrase prompt
-#   keymap     — loads the keymap from vconsole.conf at the passphrase prompt
-#   block      — enables block device support (needed before encrypt)
-#   encrypt    — unlocks the LUKS partition (only added if LUKS is enabled)
-#   filesystems — mounts filesystems
-#   fsck       — checks filesystem integrity at boot
-#
-# CRITICAL: kms is intentionally EXCLUDED when using the Nvidia proprietary driver.
-# kms loads kernel mode setting early which conflicts with the nvidia module and
-# causes a black screen on boot. AMD and Intel open source drivers work fine with kms.
-if [[ "$LUKS" == true ]]; then
-    if [[ "$GPU" == "nvidia" ]]; then
-        sed -i 's/^HOOKS=.*$/HOOKS=(base udev autodetect microcode modconf keyboard keymap block encrypt filesystems fsck)/' /etc/mkinitcpio.conf
-    else
-        sed -i 's/^HOOKS=.*$/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block encrypt filesystems fsck)/' /etc/mkinitcpio.conf
-    fi
-    echo "mkinitcpio HOOKS updated for LUKS"
-else
-    if [[ "$GPU" == "nvidia" ]]; then
-        sed -i 's/^HOOKS=.*$/HOOKS=(base udev autodetect microcode modconf keyboard keymap block filesystems fsck)/' /etc/mkinitcpio.conf
-    else
-        sed -i 's/^HOOKS=.*$/HOOKS=(base udev autodetect microcode modconf kms keyboard keymap block filesystems fsck)/' /etc/mkinitcpio.conf
-    fi
-    echo "mkinitcpio HOOKS updated"
-fi
-
-# Regenerate all initramfs images with the new hooks.
-mkinitcpio -P
-echo "mkinitcpio regenerated"
-
 # --- Bootloader: GRUB install ---
 # --target=x86_64-efi        — install for 64-bit UEFI
 # --efi-directory=$EFI_MOUNT — where the EFI partition is mounted
 # --bootloader-id=GRUB       — name that appears in the UEFI firmware menu
 grub-install --target=x86_64-efi --efi-directory=$EFI_MOUNT --bootloader-id=GRUB --removable
 echo "GRUB installed"
-
-# --- GRUB config: kernel cmdline ---
-# We build the kernel cmdline by composing params so LUKS and GPU settings
-# combine cleanly without fragile sed chaining.
-#
-# We replace the existing GRUB_CMDLINE_LINUX line directly rather than
-# appending a new line and trying to delete the old one. Append + delete
-# is fragile — if the delete sed doesn't match, you end up with two lines
-# and subtle boot failures.
-GRUB_CMDLINE=""
-
-if [[ "$LUKS" == true ]]; then
-    # blkid gets the UUID of the raw encrypted partition (not the mapper device).
-    ROOT_UUID=\$(blkid -s UUID -o value "$ROOT_PART")
-    GRUB_CMDLINE="cryptdevice=UUID=\${ROOT_UUID}:cryptroot root=/dev/mapper/cryptroot"
-    echo "GRUB LUKS params set (UUID: \$ROOT_UUID)"
-fi
-
-if [[ "$GPU" == "nvidia" ]]; then
-    # nvidia_drm.modeset=1 — enables DRM kernel mode setting for the Nvidia driver.
-    # Required for Wayland compositors (including Hyprland) to work with Nvidia.
-    GRUB_CMDLINE="\${GRUB_CMDLINE:+\$GRUB_CMDLINE }nvidia_drm.modeset=1"
-    echo "GRUB Nvidia DRM modeset param set"
-fi
-
-sed -i "s|^GRUB_CMDLINE_LINUX=.*|GRUB_CMDLINE_LINUX=\"\$GRUB_CMDLINE\"|" /etc/default/grub
-sed -i "s|^GRUB_TIMEOUT=.*|GRUB_TIMEOUT=-1|" /etc/default/grub
-echo "GRUB timeout set to indefinite"
-
-# --- GRUB config: dual boot ---
-# os-prober is disabled by default in /etc/default/grub. Enable it so
-# Windows shows up in the GRUB menu on dual boot machines.
-if [[ "$DUAL_BOOT" == true ]]; then
-    if grep -q "GRUB_DISABLE_OS_PROBER" /etc/default/grub; then
-        sed -i 's/.*GRUB_DISABLE_OS_PROBER.*/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
-    else
-        echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
-    fi
-    echo "os-prober enabled for dual boot"
-fi
-
-# --- GRUB config: generate ---
-# grub-mkconfig MUST run after all edits to /etc/default/grub are complete.
-# It reads the config file, detects kernels and other OSes, and writes
-# the final /boot/grub/grub.cfg that GRUB actually reads at boot.
-grub-mkconfig -o /boot/grub/grub.cfg
-echo "GRUB config generated"
 
 # --- Services ---
 systemctl enable NetworkManager
@@ -724,32 +605,77 @@ fi
 
 echo "Services enabled"
 
-# --- SSH daemon hardening ---
-# Drop-in so we don't clobber the stock sshd_config.
-# Key-only auth from first boot — no password auth ever exposed.
-mkdir -p /etc/ssh/sshd_config.d
-cat > /etc/ssh/sshd_config.d/99-baker.conf <<SSHDCONF
-PasswordAuthentication no
-PubkeyAuthentication yes
-SSHDCONF
-echo "sshd hardened (key-only auth)"
-echo ""
-echo "Chroot configuration complete."
+# --- System configuration ---
+# configure.sh handles timezone, locale, keymap, hostname, sudo, mkinitcpio,
+# GRUB config, and sshd hardening. It reads vars from the environment above.
+curl -fsSL "$REPO_RAW/configure.sh" | bash
+
+echo "Chroot complete."
 EOF
 
 success "Chroot configuration done"
 
 # =============================================================================
-# SECTION 8 — POST-INSTALL SCRIPT SETUP
-# Copy post-install.sh to the new user's home directory so it's ready
-# to run after first boot. Also write a config file with the values
-# the post-install script needs.
+# SECTION 8 — BAKER CONFIG
+# Write ~/.baker-config to the new system. This is the permanent machine
+# identity and config file — read by baker-update on every run.
 # =============================================================================
-section "Setting up post-install script"
+section "Writing .baker-config"
 
-REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/baker/main"
+LOCALE="en_GB.UTF-8"
+KEYMAP="us"
+BAKER_CONFIG="/mnt/home/$USERNAME/.baker-config"
 
-info "Downloading post-install.sh and post-reboot.sh from repo..."
+cat > "$BAKER_CONFIG" <<BAKERCONF
+# =============================================================================
+# BakerOS Machine Configuration — ~/.baker-config
+# Edit values under SYSTEM CONFIG and run baker-update to apply.
+# Values under HARDWARE are auto-detected — edits will be reset on next update.
+# =============================================================================
+
+# --- System Config (editable) ---
+HOSTNAME=$HOSTNAME
+TIMEZONE=$TIMEZONE
+LOCALE=$LOCALE
+KEYMAP=$KEYMAP
+DOTFILES_URL=$DOTFILES_URL
+
+# --- Hardware (auto-detected, do not edit) ---
+USERNAME=$USERNAME
+PROFILE=$PROFILE
+GPU=$GPU
+BAKERCONF
+
+# LUKS and HDD written separately so related keys stay grouped together
+if [[ "$LUKS" == true ]]; then
+    printf "LUKS=true\nLUKS_UUID=%s\n" "$LUKS_UUID" >> "$BAKER_CONFIG"
+else
+    echo "LUKS=false" >> "$BAKER_CONFIG"
+fi
+
+echo "DUAL_BOOT=$DUAL_BOOT" >> "$BAKER_CONFIG"
+
+if [[ "$HDD" == true ]]; then
+    printf "HDD=true\nHDD_MOUNT=%s\n" "$HDD_MOUNT" >> "$BAKER_CONFIG"
+else
+    echo "HDD=false" >> "$BAKER_CONFIG"
+fi
+
+if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
+    printf "\n# --- Temporary (stripped by post-install.sh after first boot) ---\nWIFI_SSID=%s\nWIFI_PASSWORD=%s\n" \
+        "$WIFI_SSID" "$WIFI_PASSWORD" >> "$BAKER_CONFIG"
+fi
+
+success ".baker-config written"
+
+# =============================================================================
+# SECTION 9 — POST-INSTALL SCRIPT SETUP
+# Download post-install.sh and post-reboot.sh to the new user's home directory
+# so they're ready to run after first boot.
+# =============================================================================
+section "Downloading post-install scripts"
+
+info "Downloading post-install.sh and post-reboot.sh..."
 curl -fsSL "$REPO_RAW/post-install.sh" -o /mnt/home/"$USERNAME"/post-install.sh \
     || error "Failed to download post-install.sh"
 curl -fsSL "$REPO_RAW/post-reboot.sh" -o /mnt/home/"$USERNAME"/post-reboot.sh \
@@ -758,22 +684,6 @@ chmod +x /mnt/home/"$USERNAME"/post-install.sh
 chmod +x /mnt/home/"$USERNAME"/post-reboot.sh
 success "post-install.sh and post-reboot.sh downloaded to /home/$USERNAME/"
 
-BAKER_CONFIG="/mnt/home/$USERNAME/.baker-config"
-cat > "$BAKER_CONFIG" <<BAKERCONF
-USERNAME=$USERNAME
-PROFILE=$PROFILE
-DOTFILES_URL=$DOTFILES_URL
-TIMEZONE=$TIMEZONE
-GPU=$GPU
-BAKERCONF
-
-if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
-    echo "WIFI_SSID=$WIFI_SSID" >> "$BAKER_CONFIG"
-    echo "WIFI_PASSWORD=$WIFI_PASSWORD" >> "$BAKER_CONFIG"
-    success "Wifi credentials written to .baker-config"
-fi
-
-success ".baker-config written"
 info "After first boot, run: bash ~/post-install.sh"
 info "After post-install reboots, run: bash ~/post-reboot.sh"
 
