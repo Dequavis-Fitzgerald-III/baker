@@ -168,8 +168,9 @@ ROOT_SOURCE=$(findmnt -n -o SOURCE /)
 ROOT_FS_TYPE=$(lsblk -no TYPE "$ROOT_SOURCE" 2>/dev/null)
 if [[ "$ROOT_FS_TYPE" == "crypt" ]]; then
     DETECTED_LUKS=true
-    CRYPT_DEVICE=$(cryptsetup status cryptroot 2>/dev/null | awk '/device:/ {print $2}')
-    DETECTED_LUKS_UUID=$(sudo blkid -s UUID -o value "$CRYPT_DEVICE" 2>/dev/null)
+    # PKNAME gives the parent kernel device (e.g. sda3) regardless of mapper name
+    CRYPT_PARENT=$(lsblk -no PKNAME "$ROOT_SOURCE" 2>/dev/null)
+    DETECTED_LUKS_UUID=$(sudo blkid -s UUID -o value "/dev/$CRYPT_PARENT" 2>/dev/null || true)
 else
     DETECTED_LUKS=false
     DETECTED_LUKS_UUID=""
