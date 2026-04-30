@@ -133,9 +133,92 @@ bash "$BAKER_DIR/sync-baker-keys.sh"
 success "SSH config up to date"
 
 # =============================================================================
-# SECTION 8 — SYSTEM CONFIGURATION
-# Applies idempotent system config from .baker-config. Only makes changes
-# if something has drifted from the desired state.
+# SECTION 8 — SYNC .baker-config
+# Re-detects hardware values from the live system and rewrites .baker-config
+# in canonical format. Editable values are preserved from the current file.
+# =============================================================================
+section "Syncing .baker-config"
+
+# GPU — check which driver module is loaded
+if lsmod | grep -q "^nvidia "; then
+    DETECTED_GPU="nvidia"
+elif lsmod | grep -q "^amdgpu "; then
+    DETECTED_GPU="amd"
+elif lsmod | grep -q "^i915 "; then
+    DETECTED_GPU="intel"
+else
+    DETECTED_GPU="none"
+fi
+
+# LUKS — check if root filesystem sits on a crypt device
+ROOT_SOURCE=$(findmnt -n -o SOURCE /)
+ROOT_FS_TYPE=$(lsblk -no TYPE "$ROOT_SOURCE" 2>/dev/null)
+if [[ "$ROOT_FS_TYPE" == "crypt" ]]; then
+    DETECTED_LUKS=true
+    CRYPT_DEVICE=$(cryptsetup status cryptroot 2>/dev/null | awk '/device:/ {print $2}')
+    DETECTED_LUKS_UUID=$(sudo blkid -s UUID -o value "$CRYPT_DEVICE" 2>/dev/null)
+else
+    DETECTED_LUKS=false
+    DETECTED_LUKS_UUID=""
+fi
+
+# DUAL_BOOT — check for Windows EFI files on the EFI partition
+EFI_DIR=$(findmnt -n -o TARGET /boot/efi 2>/dev/null || findmnt -n -o TARGET /boot 2>/dev/null)
+if ls "${EFI_DIR}/EFI/" 2>/dev/null | grep -qi "microsoft"; then
+    DETECTED_DUAL_BOOT=true
+else
+    DETECTED_DUAL_BOOT=false
+fi
+
+# HDD — check if the stored HDD_MOUNT is still present in fstab
+if [[ -n "$HDD_MOUNT" ]] && grep -qE "^\S+\s+${HDD_MOUNT}\s+" /etc/fstab; then
+    DETECTED_HDD=true
+    DETECTED_HDD_MOUNT="$HDD_MOUNT"
+else
+    DETECTED_HDD=false
+    DETECTED_HDD_MOUNT=""
+fi
+
+cat > "$BAKER_CONFIG" <<BAKERCONF
+# =============================================================================
+# BakerOS Machine Configuration — ~/.baker-config
+# Edit values under SYSTEM CONFIG and run baker-update to apply.
+# Values under HARDWARE are auto-detected — edits will be reset on next update.
+# =============================================================================
+
+# --- System Config (editable) ---
+HOSTNAME=$HOSTNAME
+TIMEZONE=$TIMEZONE
+LOCALE=$LOCALE
+KEYMAP=$KEYMAP
+DOTFILES_URL=$DOTFILES_URL
+
+# --- Hardware (auto-detected, do not edit) ---
+USERNAME=$USERNAME
+PROFILE=$PROFILE
+GPU=$DETECTED_GPU
+BAKERCONF
+
+if [[ "$DETECTED_LUKS" == true ]]; then
+    printf "LUKS=true\nLUKS_UUID=%s\n" "$DETECTED_LUKS_UUID" >> "$BAKER_CONFIG"
+else
+    echo "LUKS=false" >> "$BAKER_CONFIG"
+fi
+
+echo "DUAL_BOOT=$DETECTED_DUAL_BOOT" >> "$BAKER_CONFIG"
+
+if [[ "$DETECTED_HDD" == true ]]; then
+    printf "HDD=true\nHDD_MOUNT=%s\n" "$DETECTED_HDD_MOUNT" >> "$BAKER_CONFIG"
+else
+    echo "HDD=false" >> "$BAKER_CONFIG"
+fi
+
+success ".baker-config synced"
+
+# =============================================================================
+# SECTION 9 — SYSTEM CONFIGURATION
+# Applies idempotent system config from the freshly synced .baker-config.
+# Only makes changes if something has drifted from the desired state.
 # =============================================================================
 section "Applying system configuration"
 sudo bash "$BAKER_DIR/configure.sh" "$HOME/.baker-config"

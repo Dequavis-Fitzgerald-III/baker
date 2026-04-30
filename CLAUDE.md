@@ -125,7 +125,8 @@ Run on any live baker machine to converge it to the current desired state. Safe 
 6. Pull dotfiles + re-symlink
 7. Ensure services enabled
 8. Rebuild SSH config via `sync-baker-keys.sh`
-9. Run `configure.sh` — converges system config to current `.baker-config`
+9. Sync `.baker-config` — re-detects hardware (GPU, LUKS, HDD, dual boot) and rewrites file
+10. Run `configure.sh` — converges system config to the freshly synced `.baker-config`
 
 ### `.baker-config`
 Permanent machine config file written by `install.sh` to `~/.baker-config`. Persists across reboots and is never deleted. Has two sections:
