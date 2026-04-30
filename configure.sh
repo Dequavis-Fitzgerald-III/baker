@@ -39,8 +39,9 @@ success "Timezone: $TIMEZONE"
 # Uncomments the locale in locale.gen if not already active, then regenerates.
 # =============================================================================
 section "Locale"
+[[ -z "$LOCALE" ]] && error "LOCALE is not set in .baker-config"
 if ! locale -a 2>/dev/null | grep -qF "${LOCALE/UTF-8/utf8}"; then
-    sed -i "s|^#${LOCALE}|${LOCALE}|" /etc/locale.gen
+    sed -i "/^#${LOCALE//./\\.} /s/^#//" /etc/locale.gen
     locale-gen
     success "Locale generated: $LOCALE"
 else
