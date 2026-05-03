@@ -133,8 +133,9 @@ fi
 
 # =============================================================================
 # GRUB CONFIGURATION
-# Builds the kernel cmdline from LUKS_UUID and GPU, sets timeout to indefinite,
-# enables os-prober for dual boot. Only runs grub-mkconfig if something changed.
+# Builds the kernel cmdline from LUKS_UUID and GPU, sets timeout, enables
+# os-prober for dual boot, and sets the baker theme if present in dotfiles.
+# Only runs grub-mkconfig if something changed.
 # =============================================================================
 section "GRUB"
 
@@ -172,6 +173,20 @@ if [[ "$DUAL_BOOT" == true ]]; then
             echo "GRUB_DISABLE_OS_PROBER=false" >> /etc/default/grub
         fi
         info "os-prober enabled for dual boot"
+        GRUB_CHANGED=true
+    fi
+fi
+
+if [[ -f "/boot/grub/themes/baker/theme.txt" ]]; then
+    DESIRED_THEME="GRUB_THEME=\"/boot/grub/themes/baker/theme.txt\""
+    CURRENT_THEME=$(grep "^GRUB_THEME=" /etc/default/grub || true)
+    if [[ "$CURRENT_THEME" != "$DESIRED_THEME" ]]; then
+        if grep -q "^GRUB_THEME=" /etc/default/grub; then
+            sed -i "s|^GRUB_THEME=.*|$DESIRED_THEME|" /etc/default/grub
+        else
+            echo "$DESIRED_THEME" >> /etc/default/grub
+        fi
+        info "GRUB theme set"
         GRUB_CHANGED=true
     fi
 fi

@@ -196,10 +196,27 @@ symlink() {
     success "Linked $src → $dst"
 }
 
+sudo_symlink() {
+    local src="$1"
+    local dst="$2"
+    sudo mkdir -p "$(dirname "$dst")"
+    if [[ -e "$dst" && ! -L "$dst" ]]; then
+        warn "Backing up existing $dst to $dst.bak"
+        sudo mv "$dst" "$dst.bak"
+    fi
+    sudo ln -sf "$src" "$dst"
+    success "Linked $src → $dst"
+}
+
 symlink "$DOTFILES_DIR/bash/.bashrc"               "$HOME/.bashrc"
 symlink "$DOTFILES_DIR/kitty/kitty.conf"           "$HOME/.config/kitty/kitty.conf"
+symlink "$DOTFILES_DIR/kitty/mocha.conf"           "$HOME/.config/kitty/mocha.conf"
 symlink "$DOTFILES_DIR/hypr/hyprland.conf"         "$HOME/.config/hypr/hyprland.conf"
 symlink "$DOTFILES_DIR/waybar"                     "$HOME/.config/waybar"
+symlink "$DOTFILES_DIR/dunst/dunstrc"              "$HOME/.config/dunst/dunstrc"
+symlink "$DOTFILES_DIR/rofi/config.rasi"           "$HOME/.config/rofi/config.rasi"
+sudo_symlink "$DOTFILES_DIR/grub/theme"            "/boot/grub/themes/baker"
+sudo_symlink "$DOTFILES_DIR/sddm/sddm.conf"        "/etc/sddm.conf"
 success "Dotfiles symlinked"
 
 sleep 1
