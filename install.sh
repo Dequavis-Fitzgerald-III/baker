@@ -26,11 +26,11 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 
-# =============================================================================
-# HARDWARE DETECTION
-# Runs silently before any prompts. Detected values pre-fill prompt defaults.
-# Every detection fails safely — the prompt just falls back to its original default.
-# =============================================================================
+# #############################################################################
+# PHASE 1 — HARDWARE DETECTION
+# Runs silently. Detected values pre-fill prompt defaults in Phase 2.
+# Every detection fails safely — prompts fall back to their original defaults.
+# #############################################################################
 info "Detecting hardware..."
 
 DETECTED_GPU=""
@@ -80,12 +80,15 @@ fi
 [[ "$DETECTED_DUAL_BOOT" == true ]] && info "  Dual boot: Windows detected"
 echo ""
 
-# =============================================================================
-# SECTION 1 — INTERACTIVE QUESTIONS
-# We ask everything upfront so the install can run unattended after this point.
+# #############################################################################
+# PHASE 2 — INTERACTIVE PROMPTS
+# Ask everything upfront so the install runs unattended after this point.
+# Detected values from Phase 1 are used as defaults — press Enter to accept.
+# Any detection that depends on a prior answer (secondary disks) runs inline
+# immediately after that answer.
 # Order: profile → hostname → username → cpu → gpu → timezone → wifi (laptop only)
 #        → disk → dual boot → hdd (workstation only) → luks → passwords → dotfiles
-# =============================================================================
+# #############################################################################
 section "Welcome to the Arch Installer"
 echo "Answer the questions below. The install will begin after."
 echo ""
@@ -463,6 +466,11 @@ warn "THIS WILL WIPE $DISK. There is no undo."
 read -rp "Type YES to continue: " CONFIRM
 [[ "$CONFIRM" != "YES" ]] && error "Aborted."
 success "Confirmed, beginning install."
+
+# #############################################################################
+# PHASE 3 — INSTALL
+# Fully unattended from here. All decisions were made in Phase 2.
+# #############################################################################
 
 # =============================================================================
 # SECTION 2 — PARTITIONING
