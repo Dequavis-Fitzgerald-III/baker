@@ -218,14 +218,29 @@ if [[ "$PROFILE" == "laptop" ]]; then
 fi
 
 # --- Primary Disk ---
-# We list available disks so you can see what's there before typing.
 section "Disk Selection"
 echo "Available disks:"
-lsblk -dpno NAME,SIZE,MODEL | grep -v loop
+_disk_names=()
+i=1
+while IFS= read -r _line; do
+    echo "  $i)  $_line"
+    _disk_names+=("$(echo "$_line" | awk '{print $1}')")
+    i=$(( i + 1 ))
+done < <(lsblk -dpno NAME,SIZE,MODEL | grep -v loop)
 echo ""
-read -rp "Disk to install to (e.g. /dev/nvme0n1): " DISK
-[[ ! -b "$DISK" ]] && error "Disk $DISK not found."
+_disk_count=${#_disk_names[@]}
+[[ "$_disk_count" -eq 0 ]] && error "No disks found."
+read -rp "Disk to install to [1-${_disk_count}]: " _disk_input
+[[ "$_disk_input" =~ ^[0-9]+$ ]] && [[ "$_disk_input" -ge 1 ]] && [[ "$_disk_input" -le "$_disk_count" ]] \
+    || error "Invalid selection."
+DISK="/dev/${_disk_names[$(( _disk_input - 1 ))]}"
 success "System will be installed on $DISK"
+
+# Detect remaining disks now that the primary is known
+mapfile -t _other_disks < <(lsblk -dpno NAME,TYPE 2>/dev/null | awk -v d="$DISK" '$2=="disk" && "/dev/"$1 != d {print "/dev/"$1}' || true)
+_other_disk_count=${#_other_disks[@]}
+_detected_hdd=""
+[[ "$_other_disk_count" -eq 1 ]] && _detected_hdd="${_other_disks[0]}"
 
 # --- Dual boot ---
 _dual_hint=""
@@ -289,32 +304,49 @@ HDD_MOUNT=""
 
 if [[ "$PROFILE" == "workstation" ]]; then
     echo ""
-    read -rp "Mount a secondary internal HDD? [y/N]: " HDD_INPUT
-    if [[ "$HDD_INPUT" =~ ^[Yy]$ ]]; then
-        HDD=true
+    if [[ "$_other_disk_count" -eq 0 ]]; then
+        info "No secondary disks detected, skipping HDD setup."
+    else
+        read -rp "Mount a secondary internal HDD? [y/N]: " HDD_INPUT
+        if [[ "$HDD_INPUT" =~ ^[Yy]$ ]]; then
+            HDD=true
 
-        echo ""
-        echo "Available disks (excluding the primary install disk):"
-        lsblk -dpno NAME,SIZE,MODEL | grep -v loop | grep -v "^$DISK "
-        echo ""
-        read -rp "Secondary drive (e.g. /dev/sda): " HDD_DISK
-        [[ ! -b "$HDD_DISK" ]] && error "Disk $HDD_DISK not found."
+            echo ""
+            echo "Secondary disks available:"
+            _hdd_names=()
+            j=1
+            while IFS= read -r _line; do
+                echo "  $j)  $_line"
+                _hdd_names+=("$(echo "$_line" | awk '{print $1}')")
+                j=$(( j + 1 ))
+            done < <(lsblk -dpno NAME,SIZE,MODEL "${_other_disks[@]}" 2>/dev/null || true)
+            echo ""
+            _hdd_default=""
+            [[ "$_other_disk_count" -eq 1 ]] && _hdd_default="1"
+            [[ -n "$_hdd_default" ]] && _hdd_hint=" [default: $_hdd_default — detected]" || _hdd_hint=""
+            read -rp "Secondary disk [1-${#_hdd_names[@]}]${_hdd_hint}: " _hdd_input
+            _hdd_input="${_hdd_input:-$_hdd_default}"
+            [[ "$_hdd_input" =~ ^[0-9]+$ ]] && [[ "$_hdd_input" -ge 1 ]] && [[ "$_hdd_input" -le "${#_hdd_names[@]}" ]] \
+                || error "Invalid selection."
+            HDD_DISK="/dev/${_hdd_names[$(( _hdd_input - 1 ))]}"
+            [[ ! -b "$HDD_DISK" ]] && error "Disk $HDD_DISK not found."
 
-        # Detect the single partition on the drive.
-        HDD_PART=$(lsblk -lnpo NAME "$HDD_DISK" | grep -v "^$HDD_DISK$" | head -n1)
-        [[ -z "$HDD_PART" ]] && error "No partition found on $HDD_DISK. Is the drive partitioned?"
-        success "Found partition: $HDD_PART"
+            # Detect the single partition on the drive.
+            HDD_PART=$(lsblk -lnpo NAME "$HDD_DISK" | grep -v "^$HDD_DISK$" | head -n1)
+            [[ -z "$HDD_PART" ]] && error "No partition found on $HDD_DISK. Is the drive partitioned?"
+            success "Found partition: $HDD_PART"
 
-        # Detect filesystem type and UUID dynamically.
-        HDD_FSTYPE=$(blkid -s TYPE -o value "$HDD_PART")
-        HDD_UUID=$(blkid -s UUID -o value "$HDD_PART")
-        [[ -z "$HDD_FSTYPE" ]] && error "Could not detect filesystem on $HDD_PART."
-        [[ -z "$HDD_UUID" ]]   && error "Could not detect UUID on $HDD_PART."
-        success "Filesystem: $HDD_FSTYPE | UUID: $HDD_UUID"
+            # Detect filesystem type and UUID dynamically.
+            HDD_FSTYPE=$(blkid -s TYPE -o value "$HDD_PART")
+            HDD_UUID=$(blkid -s UUID -o value "$HDD_PART")
+            [[ -z "$HDD_FSTYPE" ]] && error "Could not detect filesystem on $HDD_PART."
+            [[ -z "$HDD_UUID" ]]   && error "Could not detect UUID on $HDD_PART."
+            success "Filesystem: $HDD_FSTYPE | UUID: $HDD_UUID"
 
-        read -rp "Mount point [default: /mnt/hdd]: " HDD_MOUNT_INPUT
-        HDD_MOUNT="${HDD_MOUNT_INPUT:-/mnt/hdd}"
-        success "HDD will be mounted at $HDD_MOUNT"
+            read -rp "Mount point [default: /mnt/hdd]: " HDD_MOUNT_INPUT
+            HDD_MOUNT="${HDD_MOUNT_INPUT:-/mnt/hdd}"
+            success "HDD will be mounted at $HDD_MOUNT"
+        fi
     fi
 fi
 
