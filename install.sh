@@ -779,12 +779,6 @@ LOCALE=$LOCALE
 KEYMAP=$KEYMAP
 DOTFILES_URL=$DOTFILES_URL
 GRUB_TIMEOUT=-1
-
-# --- Identity (editable — written by mojo-init.sh) ---
-MOJO_USER=
-OS_NAME=
-REPO_SLUG=
-FORK_DIR=
 MOJOCONF
 
 # Hardware written separately — LUKS and HDD have conditional extra keys
@@ -823,9 +817,11 @@ section "Downloading post-install scripts"
 info "Copying post-install scripts..."
 cp "$MOJO_CLONE/post-install.sh" /mnt/home/"$USERNAME"/post-install.sh
 cp "$MOJO_CLONE/post-reboot.sh"  /mnt/home/"$USERNAME"/post-reboot.sh
+cp "$MOJO_CLONE/mojo-init.sh"    /mnt/home/"$USERNAME"/mojo-init.sh
 chmod +x /mnt/home/"$USERNAME"/post-install.sh
 chmod +x /mnt/home/"$USERNAME"/post-reboot.sh
-success "post-install.sh and post-reboot.sh copied to /home/$USERNAME/"
+chmod +x /mnt/home/"$USERNAME"/mojo-init.sh
+success "post-install scripts copied to /home/$USERNAME/"
 
 info "After first boot, run: bash ~/post-install.sh"
 info "After post-install reboots, run: bash ~/post-reboot.sh"
