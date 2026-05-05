@@ -1,1 +1,9 @@
 .~lock.*#
+
+# Dev/tracker files - local only
+CLAUDE.md
+MOJOS_SPEC.md
+MOJOS_DEV.md
+ARCHITECTURE_SHIFT.md
+ROADMAP.md
+TEMP_JARVIS_DEV_SETUP.md
