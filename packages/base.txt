@@ -11,6 +11,7 @@ bind
 sudo
 nano
 git
+github-cli
 base-devel
 openssh
 unzip
