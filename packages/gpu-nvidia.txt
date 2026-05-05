@@ -1,0 +1,9 @@
+# Nvidia GPU drivers
+# nvidia-open-dkms: open-source kernel modules (recommended for RTX 30xx+)
+# linux-headers: required for DKMS to rebuild the module on kernel upgrades
+
+[pacman]
+linux-headers
+nvidia-open-dkms
+nvidia-utils
+nvidia-settings

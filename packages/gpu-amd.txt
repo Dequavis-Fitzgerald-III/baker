@@ -1,0 +1,6 @@
+# AMD GPU drivers
+
+[pacman]
+mesa
+vulkan-radeon
+libva-mesa-driver

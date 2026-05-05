@@ -493,19 +493,11 @@ while IFS= read -r pkg; do
 done < <(
     curl -fsSL "$REPO_RAW/packages/base.txt"     | parse_section pacman
     curl -fsSL "$REPO_RAW/packages/$PROFILE.txt" | parse_section pacman
+    [[ "$GPU" != "none" ]] && curl -fsSL "$REPO_RAW/packages/gpu-$GPU.txt" | parse_section pacman
 )
 
 # Bootstrap packages — install-time only, not in manifests
 PACKAGES+=(base linux linux-firmware "$UCODE" dosfstools grub efibootmgr os-prober)
-
-# GPU drivers — hardware-specific, not in manifests
-if [[ "$GPU" == "nvidia" ]]; then
-    PACKAGES+=(linux-headers nvidia-open-dkms nvidia-utils nvidia-settings)
-elif [[ "$GPU" == "amd" ]]; then
-    PACKAGES+=(mesa vulkan-radeon libva-mesa-driver)
-elif [[ "$GPU" == "intel" ]]; then
-    PACKAGES+=(mesa vulkan-intel intel-media-driver)
-fi
 
 # Fix keyring before pacstrap — old ISO keyrings cause signature verification
 # errors when installing packages from current repos.

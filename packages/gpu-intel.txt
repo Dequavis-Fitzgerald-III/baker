@@ -1,0 +1,6 @@
+# Intel GPU drivers
+
+[pacman]
+mesa
+vulkan-intel
+intel-media-driver
