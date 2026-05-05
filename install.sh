@@ -10,6 +10,8 @@
 # to carry on and make things worse.
 set -e
 
+MOJO_CLONE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 # -----------------------------------------------------------------------------
 # COLOURS — just makes the output easier to read during a long install
 # -----------------------------------------------------------------------------
@@ -625,9 +627,7 @@ info "This will take a while depending on your connection..."
 # Manifests hold the "ongoing" packages — tools and apps for a running system.
 # Bootstrap packages (kernel, bootloader, fs tools, hardware drivers) are added
 # directly here because they are install-time only or hardware-specific.
-REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/mojos/main"
-
-info "Fetching package manifests..."
+info "Reading package manifests..."
 
 # Extracts a named [section] block from manifest content piped via stdin.
 parse_section() {
@@ -638,9 +638,9 @@ PACKAGES=()
 while IFS= read -r pkg; do
     PACKAGES+=("$pkg")
 done < <(
-    curl -fsSL "$REPO_RAW/packages/base.txt"                           | parse_section pacman
-    curl -fsSL "$REPO_RAW/packages/profile/$PROFILE.txt"               | parse_section pacman
-    [[ "$GPU" != "none" ]] && curl -fsSL "$REPO_RAW/packages/hardware/gpu-$GPU.txt" | parse_section pacman
+    parse_section pacman < "$MOJO_CLONE/packages/base.txt"
+    parse_section pacman < "$MOJO_CLONE/packages/profile/$PROFILE.txt"
+    [[ "$GPU" != "none" ]] && parse_section pacman < "$MOJO_CLONE/packages/hardware/gpu-$GPU.txt"
 )
 
 # Bootstrap packages — install-time only, not in manifests
@@ -695,6 +695,8 @@ cat /mnt/etc/fstab
 # =============================================================================
 section "Entering chroot to configure system"
 
+cp "$MOJO_CLONE/configure.sh" /mnt/tmp/configure.sh
+
 arch-chroot /mnt /bin/bash <<EOF
 
 set -e
@@ -746,12 +748,13 @@ echo "Services enabled"
 # --- System configuration ---
 # configure.sh handles timezone, locale, keymap, hostname, sudo, mkinitcpio,
 # GRUB config, and sshd hardening. It reads vars from the environment above.
-curl -fsSL "$REPO_RAW/configure.sh" | bash
+bash /tmp/configure.sh
 
 echo "Chroot complete."
 EOF
 
 success "Chroot configuration done"
+rm -f /mnt/tmp/configure.sh
 
 # =============================================================================
 # SECTION 8 — MOJO CONFIG
@@ -817,14 +820,12 @@ success ".mojo_config written"
 # =============================================================================
 section "Downloading post-install scripts"
 
-info "Downloading post-install.sh and post-reboot.sh..."
-curl -fsSL "$REPO_RAW/post-install.sh" -o /mnt/home/"$USERNAME"/post-install.sh \
-    || error "Failed to download post-install.sh"
-curl -fsSL "$REPO_RAW/post-reboot.sh" -o /mnt/home/"$USERNAME"/post-reboot.sh \
-    || error "Failed to download post-reboot.sh"
+info "Copying post-install scripts..."
+cp "$MOJO_CLONE/post-install.sh" /mnt/home/"$USERNAME"/post-install.sh
+cp "$MOJO_CLONE/post-reboot.sh"  /mnt/home/"$USERNAME"/post-reboot.sh
 chmod +x /mnt/home/"$USERNAME"/post-install.sh
 chmod +x /mnt/home/"$USERNAME"/post-reboot.sh
-success "post-install.sh and post-reboot.sh downloaded to /home/$USERNAME/"
+success "post-install.sh and post-reboot.sh copied to /home/$USERNAME/"
 
 info "After first boot, run: bash ~/post-install.sh"
 info "After post-install reboots, run: bash ~/post-reboot.sh"
