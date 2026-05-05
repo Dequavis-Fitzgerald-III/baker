@@ -78,7 +78,7 @@ success "CPU: $CPU ($UCODE)"
 # --- GPU ---
 echo ""
 echo "Select GPU brand:"
-echo "  1) Nvidia  — will install nvidia, nvidia-utils, nvidia-settings"
+echo "  1) Nvidia  — will install linux-headers, nvidia-open-dkms, nvidia-utils, nvidia-settings"
 echo "  2) AMD     — will install mesa, vulkan-radeon, libva-mesa-driver"
 echo "  3) Intel   — will install mesa, vulkan-intel, intel-media-driver"
 echo "  4) None    — skip GPU drivers"
@@ -500,7 +500,7 @@ PACKAGES+=(base linux linux-firmware "$UCODE" dosfstools grub efibootmgr os-prob
 
 # GPU drivers — hardware-specific, not in manifests
 if [[ "$GPU" == "nvidia" ]]; then
-    PACKAGES+=(nvidia-dkms nvidia-utils nvidia-settings)
+    PACKAGES+=(linux-headers nvidia-open-dkms nvidia-utils nvidia-settings)
 elif [[ "$GPU" == "amd" ]]; then
     PACKAGES+=(mesa vulkan-radeon libva-mesa-driver)
 elif [[ "$GPU" == "intel" ]]; then
