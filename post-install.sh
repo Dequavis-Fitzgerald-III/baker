@@ -33,8 +33,9 @@ section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 MOJO_CONFIG="$HOME/.mojo_config"
 [[ ! -f "$MOJO_CONFIG" ]] && error "Config file not found at $MOJO_CONFIG"
 
-# Source the config — loads USERNAME, PROFILE, DOTFILES_URL, TIMEZONE, GPU
+# Source the config — loads SYSTEM_USER, PROFILE, DOTFILES_URL, TIMEZONE, GPU, LOCALE, KEYMAP
 source "$MOJO_CONFIG"
+USERNAME="$SYSTEM_USER"
 success "Loaded install config"
 info "Profile: $PROFILE | User: $USERNAME | Dotfiles: $DOTFILES_URL"
 
@@ -228,10 +229,13 @@ success "Hyprland config reloaded"
 # These were set in chroot but we confirm them here via localectl/timedatectl
 # which write to the live system config and persist across reboots.
 # =============================================================================
-section "Confirming locale and timezone"
+section "Confirming locale, keymap, and timezone"
 
-sudo localectl set-locale LANG=en_GB.UTF-8
-success "Locale confirmed: en_GB.UTF-8"
+sudo localectl set-locale LANG="$LOCALE"
+success "Locale confirmed: $LOCALE"
+
+sudo localectl set-keymap "$KEYMAP"
+success "Keymap confirmed: $KEYMAP"
 
 sudo timedatectl set-timezone "$TIMEZONE"
 success "Timezone confirmed: $TIMEZONE"
