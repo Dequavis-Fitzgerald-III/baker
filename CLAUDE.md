@@ -44,7 +44,7 @@ Sections:
 2. Partitioning (GPT, EFI + root, LUKS optional)
 3. LUKS setup (luks2, opens as `cryptroot`) — also computes `LUKS_UUID` via `blkid`
 4. Format + mount
-5. `pacstrap` — fetches `packages/base.txt` + `packages/<profile>.txt` from the repo, adds bootstrap packages (kernel, bootloader, ucode, GPU drivers) on top, installs everything
+5. `pacstrap` — fetches `packages/base.txt` + `packages/profile/<profile>.txt` + `packages/hardware/gpu-<gpu>.txt` from the repo, adds bootstrap packages (kernel, bootloader, ucode) on top, installs everything
 6. `fstab` generation (+ optional secondary HDD entry)
 7. `arch-chroot` — bootstrap only: passwords, user creation, `grub-install`, services, then calls `configure.sh` via curl
 8. Write `.baker-config`
@@ -68,7 +68,7 @@ Run as the regular user after first boot. Reads `.install-config` written by `in
 Sections:
 1. Network check (auto-wifi on laptop using saved credentials)
 2. Install `yay` (AUR helper)
-3. AUR packages — reads `[aur]` section from `packages/base.txt` via curl
+3. AUR packages — reads `[aur]` section from `packages/base.txt`
 4. Chrome flags (disable keyring prompt)
 5. Flatpak packages — reads `[flatpak]` section from `packages/base.txt` via curl
 6. Home directory setup: clone `baker` + dotfiles repos over HTTPS, symlink dotfiles
@@ -110,11 +110,15 @@ Single source of truth for what's installed on baker machines. Both `install.sh`
 
 | File | Contents |
 |---|---|
-| `packages/base.txt` | All profiles — `[pacman]`, `[aur]`, `[flatpak]` sections |
-| `packages/workstation.txt` | pearlybaker extras — `[pacman]` section |
-| `packages/laptop.txt` | nomadbaker extras — `[pacman]` section |
+| `packages/base.txt` | Always installed — `[pacman]`, `[aur]`, `[flatpak]` sections |
+| `packages/profile/workstation.txt` | pearlybaker extras — `[pacman]` section |
+| `packages/profile/laptop.txt` | nomadbaker extras — `[pacman]` section |
+| `packages/hardware/gpu-nvidia.txt` | Nvidia GPU drivers — `[pacman]` section |
+| `packages/hardware/gpu-amd.txt` | AMD GPU drivers — `[pacman]` section |
+| `packages/hardware/gpu-intel.txt` | Intel GPU drivers — `[pacman]` section |
+| `packages/user/` | User-specific packages (e.g. `the_baker.txt`) — coming in v1.2.0 |
 
-Bootstrap packages (kernel, bootloader, ucode, GPU drivers) are hardcoded in `install.sh` only — they are install-time or hardware-specific and don't belong in the manifests.
+Bootstrap packages (kernel, bootloader, ucode) are hardcoded in `install.sh` only — they are install-time specific and don't belong in the manifests.
 
 ### `upgrade.sh`
 Run on any live baker machine to converge it to the current desired state. Safe to run at any time — all steps are idempotent. Accessible via the `baker-update` alias added to `.bashrc` by `post-reboot.sh`.

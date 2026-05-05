@@ -52,8 +52,8 @@ success "System packages upgraded"
 section "Installing missing pacman packages"
 mapfile -t PACMAN_PACKAGES < <(
     parse_section pacman < "$BAKER_DIR/packages/base.txt"
-    parse_section pacman < "$BAKER_DIR/packages/$PROFILE.txt"
-    [[ "$GPU" != "none" ]] && parse_section pacman < "$BAKER_DIR/packages/gpu-$GPU.txt"
+    parse_section pacman < "$BAKER_DIR/packages/profile/$PROFILE.txt"
+    [[ "$GPU" != "none" ]] && parse_section pacman < "$BAKER_DIR/packages/hardware/gpu-$GPU.txt"
 )
 sudo pacman -S --needed --noconfirm "${PACMAN_PACKAGES[@]}"
 success "Pacman packages up to date"

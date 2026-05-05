@@ -616,9 +616,9 @@ PACKAGES=()
 while IFS= read -r pkg; do
     PACKAGES+=("$pkg")
 done < <(
-    curl -fsSL "$REPO_RAW/packages/base.txt"     | parse_section pacman
-    curl -fsSL "$REPO_RAW/packages/$PROFILE.txt" | parse_section pacman
-    [[ "$GPU" != "none" ]] && curl -fsSL "$REPO_RAW/packages/gpu-$GPU.txt" | parse_section pacman
+    curl -fsSL "$REPO_RAW/packages/base.txt"                           | parse_section pacman
+    curl -fsSL "$REPO_RAW/packages/profile/$PROFILE.txt"               | parse_section pacman
+    [[ "$GPU" != "none" ]] && curl -fsSL "$REPO_RAW/packages/hardware/gpu-$GPU.txt" | parse_section pacman
 )
 
 # Bootstrap packages — install-time only, not in manifests
