@@ -7,3 +7,4 @@ linux-headers
 nvidia-open-dkms
 nvidia-utils
 nvidia-settings
+nvtop

@@ -4,3 +4,4 @@
 mesa
 vulkan-intel
 intel-media-driver
+nvtop

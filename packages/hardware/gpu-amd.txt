@@ -4,3 +4,4 @@
 mesa
 vulkan-radeon
 libva-mesa-driver
+nvtop

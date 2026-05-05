@@ -3,7 +3,6 @@
 [pacman]
 # Network
 networkmanager
-tailscale
 reflector
 bind
 
@@ -19,12 +18,9 @@ zip
 wget
 curl
 htop
-nvtop
 tree
 man-db
 fastfetch
-pandoc
-libreoffice-fresh
 
 # Audio
 alsa-utils
@@ -53,13 +49,6 @@ sddm
 ufw
 flatpak
 
-# Fonts
-ttf-input-nerd
-
 [aur]
-google-chrome
-nordvpn-bin
-jetbrains-toolbox
 
 [flatpak]
-com.spotify.Client

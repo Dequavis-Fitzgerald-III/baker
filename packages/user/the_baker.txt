@@ -1,0 +1,17 @@
+# the_baker packages — only installed in the_baker mode
+
+[pacman]
+tailscale
+pandoc
+libreoffice-fresh
+
+# Fonts
+ttf-input-nerd
+
+[aur]
+google-chrome
+nordvpn-bin
+jetbrains-toolbox
+
+[flatpak]
+com.spotify.Client
