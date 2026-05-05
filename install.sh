@@ -191,6 +191,28 @@ case "$TZ_INPUT" in
 esac
 success "Timezone: $TIMEZONE"
 
+# --- Locale ---
+echo ""
+echo "Select locale:"
+echo "  1) en_GB.UTF-8"
+echo "  2) en_US.UTF-8"
+echo "  3) Enter manually"
+read -rp "Locale [1-3, default: 1]: " LOCALE_INPUT
+LOCALE_INPUT="${LOCALE_INPUT:-1}"
+case "$LOCALE_INPUT" in
+    1) LOCALE="en_GB.UTF-8" ;;
+    2) LOCALE="en_US.UTF-8" ;;
+    3) read -rp "Enter locale (e.g. de_DE.UTF-8): " LOCALE ;;
+    *) error "Invalid locale selection." ;;
+esac
+success "Locale: $LOCALE"
+
+# --- Keymap ---
+echo ""
+read -rp "Console keymap [default: us]: " KEYMAP
+KEYMAP="${KEYMAP:-us}"
+success "Keymap: $KEYMAP"
+
 # --- Wifi (laptop only) ---
 # We only ask for wifi credentials if we're not already online.
 # This avoids failing when already connected (e.g. you ran the script to
@@ -442,6 +464,8 @@ echo "  Username:   $USERNAME"
 echo "  CPU:        $CPU ($UCODE)"
 echo "  GPU:        $GPU"
 echo "  Timezone:   $TIMEZONE"
+echo "  Locale:     $LOCALE"
+echo "  Keymap:     $KEYMAP"
 echo "  Disk:       $DISK"
 echo "  Dual boot:  $DUAL_BOOT"
 if [[ "$DUAL_BOOT" == true ]]; then
@@ -736,14 +760,12 @@ success "Chroot configuration done"
 # =============================================================================
 section "Writing .mojo_config"
 
-LOCALE="en_GB.UTF-8"
-KEYMAP="us"
 MOJO_CONFIG="/mnt/home/$USERNAME/.mojo_config"
 
 cat > "$MOJO_CONFIG" <<MOJOCONF
 # =============================================================================
 # MojOS Machine Configuration — ~/.mojo_config
-# Edit values under SYSTEM CONFIG and run mojo-update to apply.
+# Edit values under SYSTEM CONFIG and IDENTITY and run mojo-update to apply.
 # Values under HARDWARE are auto-detected — edits will be reset on next update.
 # =============================================================================
 
@@ -755,26 +777,31 @@ KEYMAP=$KEYMAP
 DOTFILES_URL=$DOTFILES_URL
 GRUB_TIMEOUT=-1
 
-# --- Hardware (auto-detected, do not edit) ---
-USERNAME=$USERNAME
-PROFILE=$PROFILE
-GPU=$GPU
+# --- Identity (editable — written by mojo-init.sh) ---
+MOJO_USER=
+OS_NAME=
+REPO_SLUG=
+FORK_DIR=
 MOJOCONF
 
-# LUKS and HDD written separately so related keys stay grouped together
-if [[ "$LUKS" == true ]]; then
-    printf "LUKS=true\nLUKS_UUID=%s\n" "$LUKS_UUID" >> "$MOJO_CONFIG"
-else
-    echo "LUKS=false" >> "$MOJO_CONFIG"
-fi
+# Hardware written separately — LUKS and HDD have conditional extra keys
+{
+    printf "\n# --- Hardware (auto-detected, do not edit) ---\n"
+    printf "PROFILE=%s\nGPU=%s\n" "$PROFILE" "$GPU"
+    if [[ "$LUKS" == true ]]; then
+        printf "LUKS=true\nLUKS_UUID=%s\n" "$LUKS_UUID"
+    else
+        printf "LUKS=false\n"
+    fi
+    printf "DUAL_BOOT=%s\n" "$DUAL_BOOT"
+    if [[ "$HDD" == true ]]; then
+        printf "HDD=true\nHDD_MOUNT=%s\n" "$HDD_MOUNT"
+    else
+        printf "HDD=false\n"
+    fi
+} >> "$MOJO_CONFIG"
 
-echo "DUAL_BOOT=$DUAL_BOOT" >> "$MOJO_CONFIG"
-
-if [[ "$HDD" == true ]]; then
-    printf "HDD=true\nHDD_MOUNT=%s\n" "$HDD_MOUNT" >> "$MOJO_CONFIG"
-else
-    echo "HDD=false" >> "$MOJO_CONFIG"
-fi
+printf "\n# --- System (set at install time, do not edit) ---\nSYSTEM_USER=%s\n" "$USERNAME" >> "$MOJO_CONFIG"
 
 if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
     printf "\n# --- Temporary (stripped by post-install.sh after first boot) ---\nWIFI_SSID=%s\nWIFI_PASSWORD=%s\n" \

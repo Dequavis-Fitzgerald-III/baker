@@ -193,7 +193,7 @@ fi
 cat > "$MOJO_CONFIG" <<MOJOCONF
 # =============================================================================
 # MojOS Machine Configuration — ~/.mojo_config
-# Edit values under SYSTEM CONFIG and run mojo-update to apply.
+# Edit values under SYSTEM CONFIG and IDENTITY and run mojo-update to apply.
 # Values under HARDWARE are auto-detected — edits will be reset on next update.
 # =============================================================================
 
@@ -205,25 +205,30 @@ KEYMAP=$KEYMAP
 DOTFILES_URL=$DOTFILES_URL
 GRUB_TIMEOUT=${GRUB_TIMEOUT:--1}
 
-# --- Hardware (auto-detected, do not edit) ---
-USERNAME=$USERNAME
-PROFILE=$PROFILE
-GPU=$DETECTED_GPU
+# --- Identity (editable) ---
+MOJO_USER=$MOJO_USER
+OS_NAME=$OS_NAME
+REPO_SLUG=$REPO_SLUG
+FORK_DIR=$FORK_DIR
 MOJOCONF
 
-if [[ "$DETECTED_LUKS" == true ]]; then
-    printf "LUKS=true\nLUKS_UUID=%s\n" "$DETECTED_LUKS_UUID" >> "$MOJO_CONFIG"
-else
-    echo "LUKS=false" >> "$MOJO_CONFIG"
-fi
+{
+    printf "\n# --- Hardware (auto-detected, do not edit) ---\n"
+    printf "PROFILE=%s\nGPU=%s\n" "$PROFILE" "$DETECTED_GPU"
+    if [[ "$DETECTED_LUKS" == true ]]; then
+        printf "LUKS=true\nLUKS_UUID=%s\n" "$DETECTED_LUKS_UUID"
+    else
+        printf "LUKS=false\n"
+    fi
+    printf "DUAL_BOOT=%s\n" "$DETECTED_DUAL_BOOT"
+    if [[ "$DETECTED_HDD" == true ]]; then
+        printf "HDD=true\nHDD_MOUNT=%s\n" "$DETECTED_HDD_MOUNT"
+    else
+        printf "HDD=false\n"
+    fi
+} >> "$MOJO_CONFIG"
 
-echo "DUAL_BOOT=$DETECTED_DUAL_BOOT" >> "$MOJO_CONFIG"
-
-if [[ "$DETECTED_HDD" == true ]]; then
-    printf "HDD=true\nHDD_MOUNT=%s\n" "$DETECTED_HDD_MOUNT" >> "$MOJO_CONFIG"
-else
-    echo "HDD=false" >> "$MOJO_CONFIG"
-fi
+printf "\n# --- System (set at install time, do not edit) ---\nSYSTEM_USER=%s\n" "$SYSTEM_USER" >> "$MOJO_CONFIG"
 
 success ".mojo_config synced"
 
