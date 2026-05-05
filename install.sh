@@ -27,6 +27,60 @@ error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 
 # =============================================================================
+# HARDWARE DETECTION
+# Runs silently before any prompts. Detected values pre-fill prompt defaults.
+# Every detection fails safely — the prompt just falls back to its original default.
+# =============================================================================
+info "Detecting hardware..."
+
+DETECTED_GPU=""
+DETECTED_CPU=""
+DETECTED_PROFILE=""
+DETECTED_TIMEZONE=""
+DETECTED_DUAL_BOOT=false
+
+# GPU — inspect PCI display controllers
+_gpu_raw=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' || true)
+if echo "$_gpu_raw" | grep -qi "nvidia"; then
+    DETECTED_GPU="nvidia"
+elif echo "$_gpu_raw" | grep -qi "amd\|radeon\|advanced micro"; then
+    DETECTED_GPU="amd"
+elif echo "$_gpu_raw" | grep -qi "intel"; then
+    DETECTED_GPU="intel"
+fi
+
+# CPU — vendor_id in /proc/cpuinfo
+_cpu_vendor=$(grep -m1 vendor_id /proc/cpuinfo 2>/dev/null | awk '{print $3}' || true)
+case "$_cpu_vendor" in
+    GenuineIntel) DETECTED_CPU="intel" ;;
+    AuthenticAMD) DETECTED_CPU="amd"   ;;
+esac
+
+# Profile — DMI chassis type
+# Values: 8/9/10/14 = laptop, 3-7/13/15/16 = workstation, 17/23/24/28/29 = server
+_chassis=$(cat /sys/class/dmi/id/chassis_type 2>/dev/null || true)
+case "$_chassis" in
+    8|9|10|14)           DETECTED_PROFILE="laptop"     ;;
+    3|4|5|6|7|13|15|16) DETECTED_PROFILE="workstation" ;;
+    17|23|24|28|29)      DETECTED_PROFILE="server"      ;;
+esac
+
+# Timezone — IP geolocation, short timeout so it doesn't stall on air-gapped nets
+DETECTED_TIMEZONE=$(curl -fsSL --max-time 3 ipinfo.io/timezone 2>/dev/null || true)
+
+# Dual boot — look for Windows Boot Manager in EFI entries
+if efibootmgr 2>/dev/null | grep -qi "windows boot manager"; then
+    DETECTED_DUAL_BOOT=true
+fi
+
+[[ -n "$DETECTED_GPU"           ]] && info "  GPU:      $DETECTED_GPU"
+[[ -n "$DETECTED_CPU"           ]] && info "  CPU:      $DETECTED_CPU"
+[[ -n "$DETECTED_PROFILE"       ]] && info "  Profile:  $DETECTED_PROFILE"
+[[ -n "$DETECTED_TIMEZONE"      ]] && info "  Timezone: $DETECTED_TIMEZONE"
+[[ "$DETECTED_DUAL_BOOT" == true ]] && info "  Dual boot: Windows detected"
+echo ""
+
+# =============================================================================
 # SECTION 1 — INTERACTIVE QUESTIONS
 # We ask everything upfront so the install can run unattended after this point.
 # Order: profile → hostname → username → cpu → gpu → timezone → wifi (laptop only)
@@ -40,7 +94,14 @@ echo ""
 echo "Select a profile:"
 echo "  1) Workstation  — full package set, assumes ethernet"
 echo "  2) Laptop       — leaner package set, wifi setup included"
-read -rp "Profile [1/2]: " PROFILE_INPUT
+_default=""
+case "$DETECTED_PROFILE" in
+    workstation) _default="1" ;;
+    laptop)      _default="2" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "Profile [1/2]${_hint}: " PROFILE_INPUT
+PROFILE_INPUT="${PROFILE_INPUT:-$_default}"
 case "$PROFILE_INPUT" in
     1) PROFILE="workstation" ;;
     2) PROFILE="laptop" ;;
@@ -67,7 +128,14 @@ echo ""
 echo "Select CPU brand:"
 echo "  1) Intel  — will install intel-ucode"
 echo "  2) AMD    — will install amd-ucode"
-read -rp "CPU [1/2]: " CPU_INPUT
+_default=""
+case "$DETECTED_CPU" in
+    intel) _default="1" ;;
+    amd)   _default="2" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "CPU [1/2]${_hint}: " CPU_INPUT
+CPU_INPUT="${CPU_INPUT:-$_default}"
 case "$CPU_INPUT" in
     1) CPU="intel" ; UCODE="intel-ucode" ;;
     2) CPU="amd"   ; UCODE="amd-ucode"   ;;
@@ -82,7 +150,15 @@ echo "  1) Nvidia  — will install linux-headers, nvidia-open-dkms, nvidia-util
 echo "  2) AMD     — will install mesa, vulkan-radeon, libva-mesa-driver"
 echo "  3) Intel   — will install mesa, vulkan-intel, intel-media-driver"
 echo "  4) None    — skip GPU drivers"
-read -rp "GPU [1-4]: " GPU_INPUT
+_default=""
+case "$DETECTED_GPU" in
+    nvidia) _default="1" ;;
+    amd)    _default="2" ;;
+    intel)  _default="3" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "GPU [1-4]${_hint}: " GPU_INPUT
+GPU_INPUT="${GPU_INPUT:-$_default}"
 case "$GPU_INPUT" in
     1) GPU="nvidia" ;;
     2) GPU="amd"    ;;
@@ -95,11 +171,18 @@ success "GPU: $GPU"
 # --- Timezone ---
 echo ""
 echo "Select timezone:"
+[[ -n "$DETECTED_TIMEZONE" ]] && echo "  0) $DETECTED_TIMEZONE  (detected)"
 echo "  1) Europe/London    (UK)"
 echo "  2) America/New_York (US East)"
 echo "  3) Enter manually"
-read -rp "Timezone [1-3]: " TZ_INPUT
+if [[ -n "$DETECTED_TIMEZONE" ]]; then
+    read -rp "Timezone [0-3, default: 0 (detected)]: " TZ_INPUT
+    TZ_INPUT="${TZ_INPUT:-0}"
+else
+    read -rp "Timezone [1-3]: " TZ_INPUT
+fi
 case "$TZ_INPUT" in
+    0) TIMEZONE="$DETECTED_TIMEZONE" ;;
     1) TIMEZONE="Europe/London" ;;
     2) TIMEZONE="America/New_York" ;;
     3) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
@@ -145,7 +228,9 @@ read -rp "Disk to install to (e.g. /dev/nvme0n1): " DISK
 success "System will be installed on $DISK"
 
 # --- Dual boot ---
-read -rp "Dual boot with Windows? [y/N]: " DUAL_BOOT_INPUT
+_dual_hint=""
+[[ "$DETECTED_DUAL_BOOT" == true ]] && _dual_hint=" (Windows detected)"
+read -rp "Dual boot with Windows?${_dual_hint} [y/N]: " DUAL_BOOT_INPUT
 DUAL_BOOT=false
 [[ "$DUAL_BOOT_INPUT" =~ ^[Yy]$ ]] && DUAL_BOOT=true
 
