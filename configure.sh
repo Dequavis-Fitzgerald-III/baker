@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
-# Baker Configure Script
-# Applies idempotent system configuration from ~/.baker-config.
+# MojOS Configure Script
+# Applies idempotent system configuration from ~/.mojo_config.
 # Called by install.sh (inside the chroot) and upgrade.sh (on a live system).
 # Safe to run at any time — all steps are idempotent.
 # =============================================================================
@@ -21,10 +21,10 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 
-# Source .baker-config if vars aren't already in the environment.
+# Source .mojo_config if vars aren't already in the environment.
 # When called from install.sh chroot, vars are exported before this runs.
 # When called from upgrade.sh, the config path is passed as $1.
-[[ -z "$PROFILE" ]] && source "${1:-$HOME/.baker-config}"
+[[ -z "$PROFILE" ]] && source "${1:-$HOME/.mojo_config}"
 
 # =============================================================================
 # TIMEZONE
@@ -39,7 +39,7 @@ success "Timezone: $TIMEZONE"
 # Uncomments the locale in locale.gen if not already active, then regenerates.
 # =============================================================================
 section "Locale"
-[[ -z "$LOCALE" ]] && error "LOCALE is not set in .baker-config"
+[[ -z "$LOCALE" ]] && error "LOCALE is not set in .mojo_config"
 if ! locale -a 2>/dev/null | grep -qF "${LOCALE/UTF-8/utf8}"; then
     sed -i "/^#${LOCALE//./\\.} /s/^#//" /etc/locale.gen
     locale-gen
@@ -105,7 +105,7 @@ fi
 # MKINITCPIO HOOKS
 # We replace the entire HOOKS line — patching individual hooks is fragile.
 # Only regenerates the initramfs if the line actually changed, since mkinitcpio -P
-# is slow and we don't want it running on every baker-update unnecessarily.
+# is slow and we don't want it running on every mojo-update unnecessarily.
 #
 # Hook order:
 #   base udev autodetect microcode modconf [kms] keyboard keymap block [encrypt] filesystems fsck
@@ -134,7 +134,7 @@ fi
 # =============================================================================
 # GRUB CONFIGURATION
 # Builds the kernel cmdline from LUKS_UUID and GPU, sets timeout, enables
-# os-prober for dual boot, and sets the baker theme if present in dotfiles.
+# os-prober for dual boot, and sets the mojo theme if present in dotfiles.
 # Only runs grub-mkconfig if something changed.
 # =============================================================================
 section "GRUB"
@@ -177,8 +177,8 @@ if [[ "$DUAL_BOOT" == true ]]; then
     fi
 fi
 
-if [[ -f "/boot/grub/themes/baker/theme.txt" ]]; then
-    DESIRED_THEME="GRUB_THEME=\"/boot/grub/themes/baker/theme.txt\""
+if [[ -f "/boot/grub/themes/mojo/theme.txt" ]]; then
+    DESIRED_THEME="GRUB_THEME=\"/boot/grub/themes/mojo/theme.txt\""
     CURRENT_THEME=$(grep "^GRUB_THEME=" /etc/default/grub || true)
     if [[ "$CURRENT_THEME" != "$DESIRED_THEME" ]]; then
         if grep -q "^GRUB_THEME=" /etc/default/grub; then
@@ -205,7 +205,7 @@ fi
 # =============================================================================
 section "sshd hardening"
 mkdir -p /etc/ssh/sshd_config.d
-cat > /etc/ssh/sshd_config.d/99-baker.conf <<SSHDCONF
+cat > /etc/ssh/sshd_config.d/99-mojo.conf <<SSHDCONF
 PasswordAuthentication no
 PubkeyAuthentication yes
 SSHDCONF

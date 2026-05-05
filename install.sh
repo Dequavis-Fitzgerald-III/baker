@@ -115,10 +115,8 @@ success "Profile: $PROFILE"
 # --- Hostname ---
 # Defaults make re-runs faster on known machines.
 echo ""
-read -rp "Hostname [default: nomadbaker for laptop, pearlybaker for workstation]: " HOSTNAME
-if [[ -z "$HOSTNAME" ]]; then
-    [[ "$PROFILE" == "laptop" ]] && HOSTNAME="nomadbaker" || HOSTNAME="pearlybaker"
-fi
+read -rp "Hostname: " HOSTNAME
+[[ -z "$HOSTNAME" ]] && error "Hostname is required."
 success "Hostname: $HOSTNAME"
 
 # --- Username ---
@@ -599,13 +597,13 @@ success "EFI mounted at /mnt$EFI_MOUNT"
 section "Installing base system (pacstrap)"
 info "This will take a while depending on your connection..."
 
-# Fetch package lists from the baker manifests.
+# Fetch package lists from the mojo manifests.
 # Manifests hold the "ongoing" packages — tools and apps for a running system.
 # Bootstrap packages (kernel, bootloader, fs tools, hardware drivers) are added
 # directly here because they are install-time only or hardware-specific.
-REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/baker/main"
+REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/mojos/main"
 
-info "Fetching package manifests from baker repo..."
+info "Fetching package manifests..."
 
 # Extracts a named [section] block from manifest content piped via stdin.
 parse_section() {
@@ -677,7 +675,7 @@ arch-chroot /mnt /bin/bash <<EOF
 
 set -e
 
-# Export config vars so configure.sh can read them without needing .baker-config,
+# Export config vars so configure.sh can read them without needing .mojo_config,
 # which hasn't been written yet at this point in the install.
 export PROFILE=$PROFILE
 export USERNAME=$USERNAME
@@ -713,7 +711,6 @@ systemctl enable NetworkManager
 systemctl enable sddm
 systemctl enable ufw
 systemctl enable sshd
-systemctl enable tailscaled
 
 if [[ "$PROFILE" == "laptop" ]]; then
     systemctl enable tlp
@@ -733,20 +730,20 @@ EOF
 success "Chroot configuration done"
 
 # =============================================================================
-# SECTION 8 — BAKER CONFIG
-# Write ~/.baker-config to the new system. This is the permanent machine
-# identity and config file — read by baker-update on every run.
+# SECTION 8 — MOJO CONFIG
+# Write ~/.mojo_config to the new system. This is the permanent machine
+# identity and config file — read by mojo-update on every run.
 # =============================================================================
-section "Writing .baker-config"
+section "Writing .mojo_config"
 
 LOCALE="en_GB.UTF-8"
 KEYMAP="us"
-BAKER_CONFIG="/mnt/home/$USERNAME/.baker-config"
+MOJO_CONFIG="/mnt/home/$USERNAME/.mojo_config"
 
-cat > "$BAKER_CONFIG" <<BAKERCONF
+cat > "$MOJO_CONFIG" <<MOJOCONF
 # =============================================================================
-# BakerOS Machine Configuration — ~/.baker-config
-# Edit values under SYSTEM CONFIG and run baker-update to apply.
+# MojOS Machine Configuration — ~/.mojo_config
+# Edit values under SYSTEM CONFIG and run mojo-update to apply.
 # Values under HARDWARE are auto-detected — edits will be reset on next update.
 # =============================================================================
 
@@ -757,35 +754,34 @@ LOCALE=$LOCALE
 KEYMAP=$KEYMAP
 DOTFILES_URL=$DOTFILES_URL
 GRUB_TIMEOUT=-1
-NORD_COUNTRY=us
 
 # --- Hardware (auto-detected, do not edit) ---
 USERNAME=$USERNAME
 PROFILE=$PROFILE
 GPU=$GPU
-BAKERCONF
+MOJOCONF
 
 # LUKS and HDD written separately so related keys stay grouped together
 if [[ "$LUKS" == true ]]; then
-    printf "LUKS=true\nLUKS_UUID=%s\n" "$LUKS_UUID" >> "$BAKER_CONFIG"
+    printf "LUKS=true\nLUKS_UUID=%s\n" "$LUKS_UUID" >> "$MOJO_CONFIG"
 else
-    echo "LUKS=false" >> "$BAKER_CONFIG"
+    echo "LUKS=false" >> "$MOJO_CONFIG"
 fi
 
-echo "DUAL_BOOT=$DUAL_BOOT" >> "$BAKER_CONFIG"
+echo "DUAL_BOOT=$DUAL_BOOT" >> "$MOJO_CONFIG"
 
 if [[ "$HDD" == true ]]; then
-    printf "HDD=true\nHDD_MOUNT=%s\n" "$HDD_MOUNT" >> "$BAKER_CONFIG"
+    printf "HDD=true\nHDD_MOUNT=%s\n" "$HDD_MOUNT" >> "$MOJO_CONFIG"
 else
-    echo "HDD=false" >> "$BAKER_CONFIG"
+    echo "HDD=false" >> "$MOJO_CONFIG"
 fi
 
 if [[ "$PROFILE" == "laptop" && -n "$WIFI_SSID" ]]; then
     printf "\n# --- Temporary (stripped by post-install.sh after first boot) ---\nWIFI_SSID=%s\nWIFI_PASSWORD=%s\n" \
-        "$WIFI_SSID" "$WIFI_PASSWORD" >> "$BAKER_CONFIG"
+        "$WIFI_SSID" "$WIFI_PASSWORD" >> "$MOJO_CONFIG"
 fi
 
-success ".baker-config written"
+success ".mojo_config written"
 
 # =============================================================================
 # SECTION 9 — POST-INSTALL SCRIPT SETUP

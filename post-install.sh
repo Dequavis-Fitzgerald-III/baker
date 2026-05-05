@@ -30,16 +30,16 @@ section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 # =============================================================================
 # LOAD CONFIG written by install.sh
 # =============================================================================
-BAKER_CONFIG="$HOME/.baker-config"
-[[ ! -f "$BAKER_CONFIG" ]] && error "Config file not found at $BAKER_CONFIG"
+MOJO_CONFIG="$HOME/.mojo_config"
+[[ ! -f "$MOJO_CONFIG" ]] && error "Config file not found at $MOJO_CONFIG"
 
 # Source the config — loads USERNAME, PROFILE, DOTFILES_URL, TIMEZONE, GPU
-source "$BAKER_CONFIG"
+source "$MOJO_CONFIG"
 success "Loaded install config"
 info "Profile: $PROFILE | User: $USERNAME | Dotfiles: $DOTFILES_URL"
 
-# Baker repo raw URL — used to fetch package manifests without needing the repo cloned yet.
-REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/baker/main"
+# Repo raw URL — used to fetch package manifests without needing the repo cloned yet.
+REPO_RAW="https://raw.githubusercontent.com/Dequavis-Fitzgerald-III/mojos/main"
 
 # Extracts a named [section] block from manifest content piped via stdin.
 # Usage: curl -fsSL "$REPO_RAW/packages/base.txt" | parse_section aur
@@ -82,9 +82,9 @@ else
     fi
 fi
 
-# NetworkManager has the wifi credentials saved — strip them from .baker-config.
-sed -i '/^WIFI_SSID=/d;/^WIFI_PASSWORD=/d;/^# --- Temporary/d' "$BAKER_CONFIG"
-success "Wifi credentials removed from .baker-config"
+# NetworkManager has the wifi credentials saved — strip them from .mojo_config.
+sed -i '/^WIFI_SSID=/d;/^WIFI_PASSWORD=/d;/^# --- Temporary/d' "$MOJO_CONFIG"
+success "Wifi credentials removed from .mojo_config"
 
 # =============================================================================
 # SECTION 2 — YAY (AUR Helper)
@@ -160,13 +160,13 @@ mkdir -p "$HOME/.venvs"
 success "Home directories created"
 
 # Clone baker (over HTTPS — no SSH key needed)
-BAKER_INSTALL_DIR="$HOME/projects/baker"
-if [[ -d "$BAKER_INSTALL_DIR/.git" ]]; then
+FORK_DIR="$HOME/projects/baker"
+if [[ -d "$FORK_DIR/.git" ]]; then
     warn "baker already exists, pulling latest..."
-    git -C "$BAKER_INSTALL_DIR" pull
+    git -C "$FORK_DIR" pull
 else
-    git clone https://github.com/Dequavis-Fitzgerald-III/baker.git "$BAKER_INSTALL_DIR"
-    success "baker cloned to $BAKER_INSTALL_DIR"
+    git clone https://github.com/Dequavis-Fitzgerald-III/baker.git "$FORK_DIR"
+    success "baker cloned to $FORK_DIR"
 fi
 
 # Clone dotfiles (over HTTPS — no SSH key needed)
@@ -215,7 +215,7 @@ symlink "$DOTFILES_DIR/hypr/hyprland.conf"         "$HOME/.config/hypr/hyprland.
 symlink "$DOTFILES_DIR/waybar"                     "$HOME/.config/waybar"
 symlink "$DOTFILES_DIR/dunst/dunstrc"              "$HOME/.config/dunst/dunstrc"
 symlink "$DOTFILES_DIR/rofi/config.rasi"           "$HOME/.config/rofi/config.rasi"
-sudo_symlink "$DOTFILES_DIR/grub/theme"            "/boot/grub/themes/baker"
+sudo_symlink "$DOTFILES_DIR/grub/theme"            "/boot/grub/themes/mojo"
 sudo_symlink "$DOTFILES_DIR/sddm/sddm.conf"        "/etc/sddm.conf"
 success "Dotfiles symlinked"
 
@@ -224,20 +224,7 @@ hyprctl reload || true
 success "Hyprland config reloaded"
 
 # =============================================================================
-# SECTION 7 — NORDVPN
-# nordvpn-bin installs the daemon. We create the group, add the user,
-# and start the service. Login and autoconnect are manual steps after reboot
-# because group membership only takes effect after re-login.
-# =============================================================================
-section "Setting up NordVPN"
-
-sudo groupadd -f nordvpn
-sudo usermod -aG nordvpn "$USERNAME"
-sudo systemctl enable --now nordvpnd
-success "NordVPN configured (login manually after reboot: nordvpn login)"
-
-# =============================================================================
-# SECTION 8 — LOCALE & TIMEZONE (ensure correct via localectl)
+# SECTION 7 — LOCALE & TIMEZONE (ensure correct via localectl)
 # These were set in chroot but we confirm them here via localectl/timedatectl
 # which write to the live system config and persist across reboots.
 # =============================================================================
@@ -304,8 +291,8 @@ success "All services enabled"
 section "SSH Setup"
 
 SSH_KEY="$HOME/.ssh/id_ed25519"
-BAKER_INSTALL_DIR="$HOME/projects/baker"
-KEYS_DIR="$BAKER_INSTALL_DIR/keys"
+FORK_DIR="$HOME/projects/baker"
+KEYS_DIR="$FORK_DIR/keys"
 CURRENT_HOST="$(cat /etc/hostname)"
 
 if [[ -f "$SSH_KEY" ]]; then
@@ -358,7 +345,7 @@ success "Git identity set"
 # Update the remote URLs on the repos we already cloned over HTTPS,
 # so push/pull on those repos also goes through SSH going forward.
 git -C "$HOME/projects/dotfiles" remote set-url origin "git@github.com:${DOTFILES_URL#https://github.com/}"
-git -C "$BAKER_INSTALL_DIR" remote set-url origin "git@github.com:Dequavis-Fitzgerald-III/baker.git"
+git -C "$FORK_DIR" remote set-url origin "git@github.com:Dequavis-Fitzgerald-III/baker.git"
 success "Remote URLs updated to SSH on existing repos"
 
 # --- Baker machine key distribution ---
@@ -418,12 +405,12 @@ fi
 success "~/.ssh/config updated with baker machine entries"
 
 # Commit and push this machine's public key so future installs pick it up
-git -C "$BAKER_INSTALL_DIR" add "keys/${CURRENT_HOST}.pub"
-if git -C "$BAKER_INSTALL_DIR" diff --cached --quiet; then
+git -C "$FORK_DIR" add "keys/${CURRENT_HOST}.pub"
+if git -C "$FORK_DIR" diff --cached --quiet; then
     warn "Key already committed in repo, skipping"
 else
-    git -C "$BAKER_INSTALL_DIR" commit -m "keys: add ${CURRENT_HOST} public key"
-    git -C "$BAKER_INSTALL_DIR" push
+    git -C "$FORK_DIR" commit -m "keys: add ${CURRENT_HOST} public key"
+    git -C "$FORK_DIR" push
     success "Public key pushed to baker repo — other machines can now sync"
 fi
 

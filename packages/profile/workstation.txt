@@ -1,4 +1,4 @@
-# Workstation packages — pearlybaker
+# Workstation packages
 
 [pacman]
 # Local LLM inference

@@ -1,4 +1,4 @@
-# Laptop packages — nomadbaker
+# Laptop packages
 
 [pacman]
 # Battery management
