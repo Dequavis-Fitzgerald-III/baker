@@ -18,6 +18,7 @@ zip
 wget
 curl
 htop
+nvtop
 tree
 man-db
 fastfetch
