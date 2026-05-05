@@ -6,7 +6,7 @@ Arch Linux tooling for the_baker's fleet of machines. Every machine starts from 
 
 GitHub: `github.com/Dequavis-Fitzgerald-III/baker`
 
-**Current version: 1.0.1** — see `VERSION` and `ROADMAP.md` for the versioning scheme and plan.
+**Current version: 1.1.0** — see `VERSION` and `ROADMAP.md` for the versioning scheme and plan.
 
 ---
 

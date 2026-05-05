@@ -2,7 +2,7 @@
 
 ## Versioning
 
-`\{milestone\}.\{feature\}.\{patch\}`
+`{milestone}.{feature}.{patch}`
 
 | Segment | Meaning |
 | - | - |
@@ -18,40 +18,14 @@
 | 3.x.x | Full ncurses TUI (quality of life) |
 
 
-
 ## Released
 
-### v1.0.0 — Baseline ✓
-
-BakerOS is operational for the_baker. Fresh install of any baker machine works end-to-end. Hardware values are manually entered. Identity is hardcoded in the scripts.
-
-- `install.sh` → `post-install.sh` → `post-reboot.sh` three-script flow
-
-- `configure.sh` — monolithic, idempotent system config
-
-- `upgrade.sh` / `baker-update` — converges live machine to desired state
-
-- the_baker fleet key registry in `keys/` — cross-machine access via Tailscale MagicDNS
-
-- Package manifests in `packages/` — single source of truth for installed software
-
-- `.baker-config` — persistent machine config
-
-### v1.0.1 — Nvidia driver fix ✓
-
-- Switched `nvidia-dkms` → `nvidia-open-dkms` in `install.sh` (open-source kernel modules, recommended for RTX 30xx+)
-- Added `linux-headers` to the Nvidia bootstrap packages so DKMS can rebuild the module on kernel upgrades
+- v1.0.0 — Baseline ✓
+- v1.0.1 — Nvidia driver fix ✓
+- v1.1.0 — Hardware Detection ✓
 
 
 ## Planned
-
-### v1.1.0 — Hardware Detection
-
-**Detail:** `phase-v1.1.0.md`
-
-Auto-detect GPU, CPU brand, profile, available disks, timezone, and dual-boot hint at the top of `install.sh`. Detected values pre-fill prompts; the_baker can still override. No UI overhaul — that comes in v1.2.0. Pure quality-of-life for the_baker right now.
-
-- `packages/gpu-nvidia.txt`, `packages/gpu-amd.txt`, `packages/gpu-intel.txt` — GPU hardware axis for the manifest system. `upgrade.sh` reads `.baker-config`’s `GPU` value and installs from the matching file, same pattern as `PROFILE` → `workstation.txt`/`laptop.txt`. Keeps GPU-specific packages (drivers, headers) tracked and synced by `baker-update`.
 
 ### v1.2.0 — the_baker/User Split
 
@@ -118,5 +92,3 @@ Replace enhanced bash prompts with a proper ncurses TUI using whiptail/dialog. T
 | NordVPN + Tailscale killswitch coexistence | Known conflict; tracked in memory |
 | ollama on workstation | Add to `packages/workstation.txt` when ready |
 | shellcheck CI | GitHub Actions lint job on every push |
-
-
