@@ -2,13 +2,15 @@
 
 ## What this repo is
 
-Personal Arch Linux fleet tooling for the "baker" family of machines. Every machine starts from a live ISO and runs through three scripts in sequence to reach a fully configured desktop.
+Arch Linux tooling for the_baker's fleet of machines. Every machine starts from a live ISO and runs through three scripts in sequence to reach a fully configured desktop.
 
 GitHub: `github.com/Dequavis-Fitzgerald-III/baker`
 
+**Current version: 1.0.1** — see `VERSION` and `ROADMAP.md` for the versioning scheme and plan.
+
 ---
 
-## The Fleet
+## The Baker Fleet
 
 All machines run Arch Linux. Tailnet name: **circus-tent**.
 
@@ -91,11 +93,11 @@ Self-deletes on completion.
 
 ## Key Registry — `keys/`
 
-`keys/` is the fleet's SSH public key registry. Each install copies `~/.ssh/id_ed25519.pub` to `keys/<hostname>.pub` and commits + pushes it.
+`keys/` is the_baker fleet key registry. Each install copies `~/.ssh/id_ed25519.pub` to `keys/<hostname>.pub` and commits + pushes it.
 
 `authorized_keys` and `~/.ssh/config` are rebuilt from whatever `.pub` files exist in the directory — the machine list is derived from the repo, not hardcoded anywhere.
 
-`~/.ssh/config` uses Tailscale MagicDNS short names (`Hostname nomadbaker`) so SSH across the fleet works once Tailscale is up, without any further config.
+`~/.ssh/config` uses Tailscale MagicDNS short names (`Hostname nomadbaker`) so SSH across the_baker's fleet works once Tailscale is up, without any further config.
 
 ### `sync-baker-keys.sh`
 Run on existing machines when a new machine joins. Pulls the repo and rebuilds `authorized_keys` + `~/.ssh/config`.
@@ -158,9 +160,22 @@ Permanent machine config file written by `install.sh` to `~/.baker-config`. Pers
 
 ---
 
+## Packages Pending Addition to Manifests
+
+Packages installed ad-hoc that should be added to `packages/base.txt`:
+
+| Package | Source | Purpose |
+|---|---|---|
+| `grim` | pacman | Wayland screenshot tool |
+| `slurp` | pacman | Interactive region/window selector for Wayland (used with grim) |
+| `wl-clipboard` | pacman | Wayland clipboard (`wl-copy`/`wl-paste`) |
+| `grimblast` | AUR | Wrapper around grim+slurp with Hyprland window detection; `grimblast copy area` → screenshot to clipboard |
+
+---
+
 ## Known Issues / Future Work
 
-- **ringbaker** — home server not yet built. When it joins the fleet it will need its own profile in `install.sh` (server profile: no desktop packages, no NordVPN — Tailscale-only).
+- **ringbaker** — home server not yet built. When it joins the_baker's fleet it will need its own profile in `install.sh` (server profile: no desktop packages, no NordVPN — Tailscale-only).
 - **`TEMP_JARVIS_DEV_SETUP.md`** — temporary file for Jarvis AI project dev environment setup on nomadbaker. Delete when Jarvis moves to the server.
 
 ## Network DNS Notes
@@ -182,6 +197,8 @@ Some networks (confirmed: Newcastle University) block Tailscale's domains (`logi
 - Commit messages: conventional commits style (`feat:`, `fix:`, `refactor:` etc.).
 - All scripts use `set -e` and the same colour/logging helpers (`info`, `success`, `warn`, `error`, `section`).
 - HTTPS for all clones in `post-install.sh` (no SSH key needed yet); git URL rewrite configured at the end of Section 10 so everything switches to SSH after that.
+- **Naming convention:** commands use kebab-case (`baker-update`, `sync-baker-keys`); scripts use kebab-case (`post-install.sh`, `post-reboot.sh`); config files use underscore (`.baker_config`, `the_baker.conf`).
+- **the_baker/user split:** `the_baker` is the role for whoever operates the_baker's fleet. `user` is anyone running BakerOS without a the_baker token. the_baker-specific steps and packages are gated on the the_baker token.
 
 ## Fix Workflow
 

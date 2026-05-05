@@ -26,12 +26,69 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error()   { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 section() { echo -e "\n${BOLD}=== $1 ===${NC}\n"; }
 
-# =============================================================================
-# SECTION 1 — INTERACTIVE QUESTIONS
-# We ask everything upfront so the install can run unattended after this point.
+# #############################################################################
+# PHASE 1 — HARDWARE DETECTION
+# Runs silently. Detected values pre-fill prompt defaults in Phase 2.
+# Every detection fails safely — prompts fall back to their original defaults.
+# #############################################################################
+info "Detecting hardware..."
+
+DETECTED_GPU=""
+DETECTED_CPU=""
+DETECTED_PROFILE=""
+DETECTED_TIMEZONE=""
+DETECTED_DUAL_BOOT=false
+
+# GPU — inspect PCI display controllers
+_gpu_raw=$(lspci 2>/dev/null | grep -iE 'vga|3d|display' || true)
+if echo "$_gpu_raw" | grep -qi "nvidia"; then
+    DETECTED_GPU="nvidia"
+elif echo "$_gpu_raw" | grep -qi "amd\|radeon\|advanced micro"; then
+    DETECTED_GPU="amd"
+elif echo "$_gpu_raw" | grep -qi "intel"; then
+    DETECTED_GPU="intel"
+fi
+
+# CPU — vendor_id in /proc/cpuinfo
+_cpu_vendor=$(grep -m1 vendor_id /proc/cpuinfo 2>/dev/null | awk '{print $3}' || true)
+case "$_cpu_vendor" in
+    GenuineIntel) DETECTED_CPU="intel" ;;
+    AuthenticAMD) DETECTED_CPU="amd"   ;;
+esac
+
+# Profile — DMI chassis type
+# Values: 8/9/10/14 = laptop, 3-7/13/15/16 = workstation, 17/23/24/28/29 = server
+_chassis=$(cat /sys/class/dmi/id/chassis_type 2>/dev/null || true)
+case "$_chassis" in
+    8|9|10|14)           DETECTED_PROFILE="laptop"     ;;
+    3|4|5|6|7|13|15|16) DETECTED_PROFILE="workstation" ;;
+    17|23|24|28|29)      DETECTED_PROFILE="server"      ;;
+esac
+
+# Timezone — IP geolocation, short timeout so it doesn't stall on air-gapped nets
+DETECTED_TIMEZONE=$(curl -fsSL --max-time 3 ipinfo.io/timezone 2>/dev/null || true)
+
+# Dual boot — look for Windows Boot Manager in EFI entries
+if efibootmgr 2>/dev/null | grep -qi "windows boot manager"; then
+    DETECTED_DUAL_BOOT=true
+fi
+
+[[ -n "$DETECTED_GPU"           ]] && info "  GPU:      $DETECTED_GPU"
+[[ -n "$DETECTED_CPU"           ]] && info "  CPU:      $DETECTED_CPU"
+[[ -n "$DETECTED_PROFILE"       ]] && info "  Profile:  $DETECTED_PROFILE"
+[[ -n "$DETECTED_TIMEZONE"      ]] && info "  Timezone: $DETECTED_TIMEZONE"
+[[ "$DETECTED_DUAL_BOOT" == true ]] && info "  Dual boot: Windows detected"
+echo ""
+
+# #############################################################################
+# PHASE 2 — INTERACTIVE PROMPTS
+# Ask everything upfront so the install runs unattended after this point.
+# Detected values from Phase 1 are used as defaults — press Enter to accept.
+# Any detection that depends on a prior answer (secondary disks) runs inline
+# immediately after that answer.
 # Order: profile → hostname → username → cpu → gpu → timezone → wifi (laptop only)
 #        → disk → dual boot → hdd (workstation only) → luks → passwords → dotfiles
-# =============================================================================
+# #############################################################################
 section "Welcome to the Arch Installer"
 echo "Answer the questions below. The install will begin after."
 echo ""
@@ -40,7 +97,14 @@ echo ""
 echo "Select a profile:"
 echo "  1) Workstation  — full package set, assumes ethernet"
 echo "  2) Laptop       — leaner package set, wifi setup included"
-read -rp "Profile [1/2]: " PROFILE_INPUT
+_default=""
+case "$DETECTED_PROFILE" in
+    workstation) _default="1" ;;
+    laptop)      _default="2" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "Profile [1/2]${_hint}: " PROFILE_INPUT
+PROFILE_INPUT="${PROFILE_INPUT:-$_default}"
 case "$PROFILE_INPUT" in
     1) PROFILE="workstation" ;;
     2) PROFILE="laptop" ;;
@@ -67,7 +131,14 @@ echo ""
 echo "Select CPU brand:"
 echo "  1) Intel  — will install intel-ucode"
 echo "  2) AMD    — will install amd-ucode"
-read -rp "CPU [1/2]: " CPU_INPUT
+_default=""
+case "$DETECTED_CPU" in
+    intel) _default="1" ;;
+    amd)   _default="2" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "CPU [1/2]${_hint}: " CPU_INPUT
+CPU_INPUT="${CPU_INPUT:-$_default}"
 case "$CPU_INPUT" in
     1) CPU="intel" ; UCODE="intel-ucode" ;;
     2) CPU="amd"   ; UCODE="amd-ucode"   ;;
@@ -78,11 +149,19 @@ success "CPU: $CPU ($UCODE)"
 # --- GPU ---
 echo ""
 echo "Select GPU brand:"
-echo "  1) Nvidia  — will install nvidia, nvidia-utils, nvidia-settings"
+echo "  1) Nvidia  — will install linux-headers, nvidia-open-dkms, nvidia-utils, nvidia-settings"
 echo "  2) AMD     — will install mesa, vulkan-radeon, libva-mesa-driver"
 echo "  3) Intel   — will install mesa, vulkan-intel, intel-media-driver"
 echo "  4) None    — skip GPU drivers"
-read -rp "GPU [1-4]: " GPU_INPUT
+_default=""
+case "$DETECTED_GPU" in
+    nvidia) _default="1" ;;
+    amd)    _default="2" ;;
+    intel)  _default="3" ;;
+esac
+[[ -n "$_default" ]] && _hint=" [default: $_default — detected]" || _hint=""
+read -rp "GPU [1-4]${_hint}: " GPU_INPUT
+GPU_INPUT="${GPU_INPUT:-$_default}"
 case "$GPU_INPUT" in
     1) GPU="nvidia" ;;
     2) GPU="amd"    ;;
@@ -95,11 +174,18 @@ success "GPU: $GPU"
 # --- Timezone ---
 echo ""
 echo "Select timezone:"
+[[ -n "$DETECTED_TIMEZONE" ]] && echo "  0) $DETECTED_TIMEZONE  (detected)"
 echo "  1) Europe/London    (UK)"
 echo "  2) America/New_York (US East)"
 echo "  3) Enter manually"
-read -rp "Timezone [1-3]: " TZ_INPUT
+if [[ -n "$DETECTED_TIMEZONE" ]]; then
+    read -rp "Timezone [0-3, default: 0 (detected)]: " TZ_INPUT
+    TZ_INPUT="${TZ_INPUT:-0}"
+else
+    read -rp "Timezone [1-3]: " TZ_INPUT
+fi
 case "$TZ_INPUT" in
+    0) TIMEZONE="$DETECTED_TIMEZONE" ;;
     1) TIMEZONE="Europe/London" ;;
     2) TIMEZONE="America/New_York" ;;
     3) read -rp "Enter timezone (e.g. Europe/Berlin): " TIMEZONE ;;
@@ -135,17 +221,34 @@ if [[ "$PROFILE" == "laptop" ]]; then
 fi
 
 # --- Primary Disk ---
-# We list available disks so you can see what's there before typing.
 section "Disk Selection"
 echo "Available disks:"
-lsblk -dpno NAME,SIZE,MODEL | grep -v loop
+_disk_names=()
+i=1
+while IFS= read -r _line; do
+    echo "  $i)  $_line"
+    _disk_names+=("$(echo "$_line" | awk '{print $1}')")
+    i=$(( i + 1 ))
+done < <(lsblk -dpno NAME,SIZE,MODEL | grep -v loop)
 echo ""
-read -rp "Disk to install to (e.g. /dev/nvme0n1): " DISK
-[[ ! -b "$DISK" ]] && error "Disk $DISK not found."
+_disk_count=${#_disk_names[@]}
+[[ "$_disk_count" -eq 0 ]] && error "No disks found."
+read -rp "Disk to install to [1-${_disk_count}]: " _disk_input
+[[ "$_disk_input" =~ ^[0-9]+$ ]] && [[ "$_disk_input" -ge 1 ]] && [[ "$_disk_input" -le "$_disk_count" ]] \
+    || error "Invalid selection."
+DISK="/dev/${_disk_names[$(( _disk_input - 1 ))]}"
 success "System will be installed on $DISK"
 
+# Detect remaining disks now that the primary is known
+mapfile -t _other_disks < <(lsblk -dpno NAME,TYPE 2>/dev/null | awk -v d="$DISK" '$2=="disk" && "/dev/"$1 != d {print "/dev/"$1}' || true)
+_other_disk_count=${#_other_disks[@]}
+_detected_hdd=""
+[[ "$_other_disk_count" -eq 1 ]] && _detected_hdd="${_other_disks[0]}"
+
 # --- Dual boot ---
-read -rp "Dual boot with Windows? [y/N]: " DUAL_BOOT_INPUT
+_dual_hint=""
+[[ "$DETECTED_DUAL_BOOT" == true ]] && _dual_hint=" (Windows detected)"
+read -rp "Dual boot with Windows?${_dual_hint} [y/N]: " DUAL_BOOT_INPUT
 DUAL_BOOT=false
 [[ "$DUAL_BOOT_INPUT" =~ ^[Yy]$ ]] && DUAL_BOOT=true
 
@@ -204,32 +307,49 @@ HDD_MOUNT=""
 
 if [[ "$PROFILE" == "workstation" ]]; then
     echo ""
-    read -rp "Mount a secondary internal HDD? [y/N]: " HDD_INPUT
-    if [[ "$HDD_INPUT" =~ ^[Yy]$ ]]; then
-        HDD=true
+    if [[ "$_other_disk_count" -eq 0 ]]; then
+        info "No secondary disks detected, skipping HDD setup."
+    else
+        read -rp "Mount a secondary internal HDD? [y/N]: " HDD_INPUT
+        if [[ "$HDD_INPUT" =~ ^[Yy]$ ]]; then
+            HDD=true
 
-        echo ""
-        echo "Available disks (excluding the primary install disk):"
-        lsblk -dpno NAME,SIZE,MODEL | grep -v loop | grep -v "^$DISK "
-        echo ""
-        read -rp "Secondary drive (e.g. /dev/sda): " HDD_DISK
-        [[ ! -b "$HDD_DISK" ]] && error "Disk $HDD_DISK not found."
+            echo ""
+            echo "Secondary disks available:"
+            _hdd_names=()
+            j=1
+            while IFS= read -r _line; do
+                echo "  $j)  $_line"
+                _hdd_names+=("$(echo "$_line" | awk '{print $1}')")
+                j=$(( j + 1 ))
+            done < <(lsblk -dpno NAME,SIZE,MODEL "${_other_disks[@]}" 2>/dev/null || true)
+            echo ""
+            _hdd_default=""
+            [[ "$_other_disk_count" -eq 1 ]] && _hdd_default="1"
+            [[ -n "$_hdd_default" ]] && _hdd_hint=" [default: $_hdd_default — detected]" || _hdd_hint=""
+            read -rp "Secondary disk [1-${#_hdd_names[@]}]${_hdd_hint}: " _hdd_input
+            _hdd_input="${_hdd_input:-$_hdd_default}"
+            [[ "$_hdd_input" =~ ^[0-9]+$ ]] && [[ "$_hdd_input" -ge 1 ]] && [[ "$_hdd_input" -le "${#_hdd_names[@]}" ]] \
+                || error "Invalid selection."
+            HDD_DISK="/dev/${_hdd_names[$(( _hdd_input - 1 ))]}"
+            [[ ! -b "$HDD_DISK" ]] && error "Disk $HDD_DISK not found."
 
-        # Detect the single partition on the drive.
-        HDD_PART=$(lsblk -lnpo NAME "$HDD_DISK" | grep -v "^$HDD_DISK$" | head -n1)
-        [[ -z "$HDD_PART" ]] && error "No partition found on $HDD_DISK. Is the drive partitioned?"
-        success "Found partition: $HDD_PART"
+            # Detect the single partition on the drive.
+            HDD_PART=$(lsblk -lnpo NAME "$HDD_DISK" | grep -v "^$HDD_DISK$" | head -n1)
+            [[ -z "$HDD_PART" ]] && error "No partition found on $HDD_DISK. Is the drive partitioned?"
+            success "Found partition: $HDD_PART"
 
-        # Detect filesystem type and UUID dynamically.
-        HDD_FSTYPE=$(blkid -s TYPE -o value "$HDD_PART")
-        HDD_UUID=$(blkid -s UUID -o value "$HDD_PART")
-        [[ -z "$HDD_FSTYPE" ]] && error "Could not detect filesystem on $HDD_PART."
-        [[ -z "$HDD_UUID" ]]   && error "Could not detect UUID on $HDD_PART."
-        success "Filesystem: $HDD_FSTYPE | UUID: $HDD_UUID"
+            # Detect filesystem type and UUID dynamically.
+            HDD_FSTYPE=$(blkid -s TYPE -o value "$HDD_PART")
+            HDD_UUID=$(blkid -s UUID -o value "$HDD_PART")
+            [[ -z "$HDD_FSTYPE" ]] && error "Could not detect filesystem on $HDD_PART."
+            [[ -z "$HDD_UUID" ]]   && error "Could not detect UUID on $HDD_PART."
+            success "Filesystem: $HDD_FSTYPE | UUID: $HDD_UUID"
 
-        read -rp "Mount point [default: /mnt/hdd]: " HDD_MOUNT_INPUT
-        HDD_MOUNT="${HDD_MOUNT_INPUT:-/mnt/hdd}"
-        success "HDD will be mounted at $HDD_MOUNT"
+            read -rp "Mount point [default: /mnt/hdd]: " HDD_MOUNT_INPUT
+            HDD_MOUNT="${HDD_MOUNT_INPUT:-/mnt/hdd}"
+            success "HDD will be mounted at $HDD_MOUNT"
+        fi
     fi
 fi
 
@@ -346,6 +466,11 @@ warn "THIS WILL WIPE $DISK. There is no undo."
 read -rp "Type YES to continue: " CONFIRM
 [[ "$CONFIRM" != "YES" ]] && error "Aborted."
 success "Confirmed, beginning install."
+
+# #############################################################################
+# PHASE 3 — INSTALL
+# Fully unattended from here. All decisions were made in Phase 2.
+# #############################################################################
 
 # =============================================================================
 # SECTION 2 — PARTITIONING
@@ -493,19 +618,11 @@ while IFS= read -r pkg; do
 done < <(
     curl -fsSL "$REPO_RAW/packages/base.txt"     | parse_section pacman
     curl -fsSL "$REPO_RAW/packages/$PROFILE.txt" | parse_section pacman
+    [[ "$GPU" != "none" ]] && curl -fsSL "$REPO_RAW/packages/gpu-$GPU.txt" | parse_section pacman
 )
 
 # Bootstrap packages — install-time only, not in manifests
 PACKAGES+=(base linux linux-firmware "$UCODE" dosfstools grub efibootmgr os-prober)
-
-# GPU drivers — hardware-specific, not in manifests
-if [[ "$GPU" == "nvidia" ]]; then
-    PACKAGES+=(nvidia-dkms nvidia-utils nvidia-settings)
-elif [[ "$GPU" == "amd" ]]; then
-    PACKAGES+=(mesa vulkan-radeon libva-mesa-driver)
-elif [[ "$GPU" == "intel" ]]; then
-    PACKAGES+=(mesa vulkan-intel intel-media-driver)
-fi
 
 # Fix keyring before pacstrap — old ISO keyrings cause signature verification
 # errors when installing packages from current repos.
